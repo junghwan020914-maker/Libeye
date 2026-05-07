@@ -1,0 +1,125 @@
+version: '3.8'
+
+services:
+  # 1. Database (PostgreSQL)
+  postgres:
+    image: postgres:15-alpine
+    container_name: libeye-postgres
+    environment:
+      POSTGRES_DB: libeye_db
+      POSTGRES_USER: libeye_admin
+      POSTGRES_PASSWORD: libeye_admin_pwd
+    ports:
+      - "5432:5432" # 외부 DB 툴(DBeaver 등) 접속 허용
+    volumes:
+      - ./postgres_data:/var/lib/postgresql/data
+    networks:
+      - libeye-network
+
+  # 2. Local Object Storage (MinIO)
+  minio:
+    image: minio/minio
+    container_name: libeye-minio
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: admin1234
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000" # 내부 API 통신용
+      - "9001:9001" # 웹 브라우저 관리자 페이지용 (핵심!)
+    volumes:
+      - ./minio_data:/data
+    networks:
+      - libeye-network
+
+  # 3. Message Queue (Redis)
+  redis:
+    image: redis:7-alpine
+    container_name: libeye-redis
+    networks:
+      - libeye-network
+
+  # 4. Ollama (AI Model Engine)
+  ollama:
+    image: ollama/ollama
+    container_name: libeye-ollama
+    #ports:
+    #  - "11434:11434"
+    volumes:
+      - /home/gpuadmin/ollama_data:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    networks:
+      - libeye-network
+
+  # 5. Main API Server (FastAPI)
+  api:
+    build: ./api
+    container_name: libeye-api
+    environment:
+      - DATABASE_URL=postgresql://libeye_admin:libeye_admin_pwd@postgres/libeye_db
+      - REDIS_URL=redis://redis:6379/0
+      - MINIO_URL=http://minio:9000
+    ports:
+      - "8000:8000" # 프론트엔드 대시보드 통신용
+    depends_on:
+      - postgres
+      - redis
+      - minio
+    networks:
+      - libeye-network
+
+  # 6. AI Worker
+  ai-worker:
+    build: ./ai_worker
+    container_name: libeye-ai-worker
+     # -------- 👇 이 줄을 새로 추가해 주세요! --------
+    command: celery -A tasks worker --pool=solo --loglevel=info
+    # ------------------------------------------------
+    
+    environment:
+      - DATABASE_URL=postgresql://libeye_admin:libeye_admin_pwd@postgres/libeye_db
+      - REDIS_URL=redis://redis:6379/0
+      - MINIO_URL=http://minio:9000
+      - OLLAMA_URL=http://ollama:11434/api/generate
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    depends_on:
+      - redis
+      - ollama
+    networks:
+      - libeye-network
+
+# 7. Ngrok (외부 접속용 터널링)
+  ngrok:
+    image: ngrok/ngrok:latest
+    container_name: libeye-ngrok
+    restart: unless-stopped
+    # libeye-api(FastAPI) 컨테이너의 8000 포트를 외부로 연결
+    command:
+      - "http"
+      - "api:8000" # 주의: 본인의 FastAPI 서비스 이름이 'api'가 아니라면 그 이름으로 맞춰주세요.
+    environment:
+      # 여기에 아까 복사한 본인의 Authtoken을 붙여넣으세요!
+      - NGROK_AUTHTOKEN=3BTTdOr7CaswL3LriIefCKQcMlv_3VtBBpR5Z8VDaQaziFDuH
+    ports:
+      - "4040:4040" # ngrok 대시보드 포트
+    networks:
+      - libeye-network
+
+
+
+networks:
+  libeye-network:
+    driver: bridge
+    name: libeye-network

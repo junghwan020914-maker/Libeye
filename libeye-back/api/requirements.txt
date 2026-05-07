@@ -1,0 +1,15 @@
+# 웹 서버 및 라우팅
+fastapi==0.104.1
+uvicorn==0.24.0.post1
+pydantic==2.5.2
+
+# 데이터베이스 연동
+sqlalchemy==2.0.23
+psycopg2-binary==2.9.9
+
+# AWS S3 (MinIO) 연동
+boto3==1.29.3
+
+# 비동기 작업 큐 (Redis/Celery)
+celery==5.3.4
+redis==5.0.1

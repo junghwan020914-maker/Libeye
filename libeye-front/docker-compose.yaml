@@ -1,0 +1,22 @@
+# frontend/docker-compose.yml
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: libeye-frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      - .:/app               # 로컬 코드를 컨테이너 내부와 동기화
+      - /app/node_modules    # 컨테이너 내부의 모듈은 덮어쓰지 않도록 보호
+    environment:
+      - CHOKIDAR_USEPOLLING=true # Windows/Mac/Ubuntu 등 호스트 환경에 상관없이 파일 변경 감지
+    networks:
+      - libeye-network      # 백엔드와 동일한 네트워크 사용 (백엔드 compose 파일의 네트워크 이름 확인 필요)
+
+networks:
+  libeye-network:
+    external: true           # 이미 생성된 백엔드 네트워크에 합류

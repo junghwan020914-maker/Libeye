@@ -1,0 +1,142 @@
+{
+	"info": {
+		"_postman_id": "b3f098c4-a5e2-4b71-8c0a-0123456789ab",
+		"name": "LibEye API Collection (Local)",
+		"description": "스마트 서고 관리 시스템 (LibEye) 백엔드 통합 테스트를 위한 API 컬렉션입니다. \n\n### 🚀 테스트 순서\n1. `1. 세션 생성` 호출 -> 반환된 `session_id` 복사\n2. `2. 업로드 URL 발급` 호출 시 경로 변수에 복사한 `session_id` 입력 -> `upload_url` 획득\n3. 발급받은 URL로 테스트 이미지 업로드 (Postman의 PUT 메서드 활용 또는 별도 툴 사용)\n4. `3. AI 분석 시작` 호출\n5. `4. 진행 상태 확인`으로 상태 체크 (PROCESSING -> COMPLETED/NEEDS_ACTION)\n6. `5. 최종 결과 및 이미지 URL 조회` 호출하여 LIS 분석 결과 확인",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "1. 스캔 세션 생성",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"location_id\": \"LOC-A-2-3\",\n    \"user_id\": \"test_admin_01\"\n}"
+				},
+				"url": {
+					"raw": "http://localhost:8000/api/v1/sessions",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8000",
+					"path": [
+						"api",
+						"v1",
+						"sessions"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "2. 스토리지 업로드 URL 발급",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8000/api/v1/sessions/{{SESSION_ID}}/upload-url",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8000",
+					"path": [
+						"api",
+						"v1",
+						"sessions",
+						"{{SESSION_ID}}",
+						"upload-url"
+					]
+				},
+				"description": "세션 생성 시 받은 UUID를 URL 경로에 넣고 호출합니다."
+			},
+			"response": []
+		},
+		{
+			"name": "3. AI 분석 시작 (비동기 큐 등록)",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8000/api/v1/sessions/{{SESSION_ID}}/analyze",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8000",
+					"path": [
+						"api",
+						"v1",
+						"sessions",
+						"{{SESSION_ID}}",
+						"analyze"
+					]
+				},
+				"description": "클라이언트가 MinIO로 사진을 모두 전송한 직후에 호출해야 합니다. Celery Worker가 백그라운드에서 추론을 시작합니다."
+			},
+			"response": []
+		},
+		{
+			"name": "4. 분석 진행 상태 확인 (Polling)",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8000/api/v1/sessions/{{SESSION_ID}}/status",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8000",
+					"path": [
+						"api",
+						"v1",
+						"sessions",
+						"{{SESSION_ID}}",
+						"status"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "5. 최종 결과 및 이미지 URL 조회",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8000/api/v1/sessions/{{SESSION_ID}}/results",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8000",
+					"path": [
+						"api",
+						"v1",
+						"sessions",
+						"{{SESSION_ID}}",
+						"results"
+					]
+				},
+				"description": "분석이 끝난 후(상태가 COMPLETED 또는 NEEDS_ACTION 일 때) 호출하면, 원본 이미지를 볼 수 있는 다운로드 URL과 LIS 알고리즘의 오배열 판독 결과를 JSON으로 줍니다."
+			},
+			"response": []
+		}
+	],
+	"variable": [
+		{
+			"key": "SESSION_ID",
+			"value": "여기에_1번에서_발급받은_세션ID를_붙여넣으세요",
+			"type": "string"
+		}
+	]
+}

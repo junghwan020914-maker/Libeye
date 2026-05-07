@@ -1,0 +1,35 @@
+# =========================
+# 1. Frontend (Vue.js / Node)
+# =========================
+libeye-front/node_modules/
+libeye-front/dist/
+libeye-front/.env
+npm-debug.log*
+
+# =========================
+# 2. Backend & AI Worker (Python)
+# =========================
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+
+# [핵심] AI 모델 가중치 파일 (절대 깃허브에 올리지 않음)
+libeye-back/ai_worker/weights/*.pt
+libeye-back/ai_worker/weights/*.pth
+libeye-back/ai_worker/weights/*.onnx
+
+# =========================
+# 3. Docker Volume Data (DB, MinIO, Ollama 등)
+# =========================
+libeye-back/postgres_data/
+libeye-back/minio_data/
+libeye-back/ollama_data/
+
+# =========================
+# 4. OS & Editor
+# =========================
+.DS_Store
+.vscode/
+.idea/
