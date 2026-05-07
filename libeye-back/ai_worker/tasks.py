@@ -166,7 +166,7 @@ def calculate_lis_misplacement(scanned_books):
 # --- 메인 파이프라인 ---
 
 @celery_app.task(name="process_image_task")
-def process_scan_session(session_id, image_data):
+def process_scan_session(session_id, original_file_name): # 파라미터 이름 변경
     if yolo_model is None:
         return {"status": "error", "message": "YOLO model not loaded"}
 
@@ -179,14 +179,13 @@ def process_scan_session(session_id, image_data):
             session.status = "PROCESSING"
             db.commit()
 
-        print(f"[{session_id}] 1. 원본 이미지 로드 및 MinIO 저장...")
-        img = load_image(image_data) 
+        print(f"[{session_id}] 1. MinIO에서 원본 이미지 다운로드...")
         
-        original_file_name = f"{session_id}_original.jpg"
-        original_url = upload_to_minio('original-bucket', original_file_name, img)
-        if session and original_url:
-            session.image_url = original_url 
-            db.commit()
+        # --- [추가] MinIO에서 파일 가져와서 OpenCV 이미지로 변환 ---
+        response = s3_client.get_object(Bucket='original-bucket', Key=original_file_name)
+        image_bytes = response['Body'].read()
+        nparr = np.frombuffer(image_bytes, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
         print(f"[{session_id}] 2. YOLO 추론 시작...")
         results = yolo_model(img, conf=0.5) 

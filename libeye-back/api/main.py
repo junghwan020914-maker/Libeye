@@ -5,6 +5,8 @@ from pydantic import BaseModel
 import uuid
 import os
 from celery import Celery # Celery 추가
+import base64
+import boto3
 
 # 내부 모듈 임포트
 from database import get_db, engine, Base
@@ -22,6 +24,15 @@ async def lifespan(app: FastAPI):
     print("Starting up FastAPI Server...")
     Base.metadata.create_all(bind=engine)
     seed_database() 
+
+    # 서버 켜질 때 original-bucket 미리 생성
+    try:
+        buckets = [b['Name'] for b in s3_client.list_buckets()['Buckets']]
+        if 'original-bucket' not in buckets:
+            s3_client.create_bucket(Bucket='original-bucket')
+    except Exception as e:
+        print("MinIO 버킷 확인 오류:", e)
+
     yield
     print("Shutting down FastAPI Server...")
 
@@ -46,22 +57,43 @@ class SessionCreateRequest(BaseModel):
 def create_session(req: SessionCreateRequest, db: Session = Depends(get_db)):
     try:
         new_session_id = f"session-{uuid.uuid4().hex[:8]}"
+        original_file_name = f"{new_session_id}_original.jpg"
         
-        # 1. DB에 세션 저장
+        # 1. Base64 이미지를 디코딩하여 MinIO에 즉시 업로드! (핵심)
+        image_bytes = base64.b64decode(req.image_base64)
+        s3_client.put_object(
+            Bucket='original-bucket',
+            Key=original_file_name,
+            Body=image_bytes,
+            ContentType='image/jpeg'
+        )
+        # 생성된 실제 MinIO URL
+        original_url = f"{MINIO_URL}/original-bucket/{original_file_name}"
+        
+        # 2. DB에 세션 저장 (이제 가짜 텍스트 대신 진짜 URL을 저장합니다)
         new_session = models.ScanSession(
             session_id=new_session_id,
             location_id=req.location_id,
-            image_url="base64_encoded_image", # 임시 텍스트
+            image_url=original_url, 
             status="PENDING"
         )
         db.add(new_session)
         db.commit()
         
-        # 2. 진짜 AI 워커(YOLO+Gemma)에게 작업 지시! (Redis 큐로 전송)
+        # 3. Redis 큐에는 무거운 이미지 대신 '파일 이름'만 전송!
         print(f"[{new_session_id}] AI 워커에 작업 전송 중...")
-        celery_app.send_task('process_image_task', args=[new_session_id, req.image_base64])
+        celery_app.send_task('process_image_task', args=[new_session_id, original_file_name])
         
         return {"session_id": new_session_id, "status": "PENDING"}
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+
+# --- [추가] MinIO 클라이언트 설정 ---
+MINIO_URL = os.getenv("MINIO_URL", "http://minio:9000")
+s3_client = boto3.client(
+    's3',
+    endpoint_url=MINIO_URL,
+    aws_access_key_id="admin",
+    aws_secret_access_key="admin1234"
+)
