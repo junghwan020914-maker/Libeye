@@ -40,18 +40,38 @@ class ScanSession(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     is_image_deleted = Column(Boolean, default=False)
     
-    results = relationship("ScanResultDetail", back_populates="session")
+    # 세션 삭제 시 연관된 ScanResultDetail 기록들도 함께 지워지도록 cascade 설정
+    results = relationship("ScanResultDetail", back_populates="session", cascade="all, delete-orphan")
 
-# 4. Scan_Result_Detail (YOLO + VLM 분석 결과 저장)
+# 4. Scan_Result_Detail (YOLO + VLM 분석 결과 및 보정 데이터 저장)
 class ScanResultDetail(Base):
     __tablename__ = 'scan_result_detail'
     
     detection_id = Column(String(50), primary_key=True)
-    session_id = Column(String(50), ForeignKey('scan_session.session_id'), index=True)
-    bounding_box = Column(JSONB)
-    ocr_text = Column(String(255))
-    matched_book_id = Column(String(50), ForeignKey('book_master.book_id'), nullable=True)
-    status = Column(String(20)) # MATCH, MISPLACED, MISSING
-    confidence = Column(Integer, default=0)
 
+    # 해당 스캔 세션 연결
+    session_id = Column(String(50), ForeignKey('scan_session.session_id'), index=True)
+    
+    # 책등 좌표
+    bounding_box = Column(JSONB)
+
+    # 1. AI 원본 데이터 (Gemma4가 추출한 책 제목, 청구기호 통째로 저장)
+    # 예: {"title": "나미야 잡화점의 기적", "call_number": "813.6 히15나"}
+    raw_ocr_data = Column(JSONB)
+
+    # 2. 보정된 정답 데이터 연결 (DB Master 연동)
+    # 이 ID를 통해 BookMaster의 정답 title, call_number를 JOIN해서 가져옵니다.
+    matched_book_id = Column(String(50), ForeignKey('book_master.book_id'), nullable=True)
+
+    # 사진 상 왼쪽부터의 물리적 순서 (오배열 판별에 사용)
+    detected_order = Column(Integer, nullable=False)
+    
+     # 최종 상태 (MATCH, MISPLACED, MISSING, EXTRA, UNKNOWN, PENDING)
+    status = Column(String(20), nullable=False, default="PENDING")
+    
+    # AI 인식 신뢰도 점수
+    confidence = Column(Float, default=0.0)
+
+    # 양방향 관계(Relationship) 설정
     session = relationship("ScanSession", back_populates="results")
+    book = relationship("BookMaster") # 매칭된 도서 객체에 ORM으로 바로 접근 가능
