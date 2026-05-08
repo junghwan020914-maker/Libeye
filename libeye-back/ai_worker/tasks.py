@@ -8,7 +8,7 @@ import requests
 import boto3
 from urllib.request import urlopen
 from celery import Celery
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, func
 from sqlalchemy.orm import sessionmaker
 
 # --- PyTorch 2.6+ 보안 정책(weights_only) 환경 변수 차단 ---
@@ -23,8 +23,8 @@ torch.load = _patched_load
 
 from ultralytics import YOLO
 
-# DB 모델 임포트
-from models import ScanSession, ScanResultDetail
+# DB 모델 임포트 (BookMaster 추가)
+from models import ScanSession, ScanResultDetail, BookMaster
 
 # --- 환경 설정 ---
 CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://redis:6379/0")
@@ -47,7 +47,10 @@ s3_client = boto3.client(
     aws_secret_access_key=MINIO_SECRET_KEY
 )
 
+# Celery 앱 초기화
 celery_app = Celery('tasks', broker=CELERY_BROKER_URL, backend=CELERY_RESULT_BACKEND)
+
+# DB 엔진 및 세션 팩토리
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
@@ -101,7 +104,7 @@ def load_image(image_data):
         return cv2.imdecode(nparr, cv2.IMREAD_COLOR)
     return None
 
-def extract_text_with_gemma(base64_image):
+def extract_text_with_gemma(base64_image: str) -> dict:
     prompt = """
     You are a library assistant. Examine the image of the book spine.
     Extract the 'call_number' (e.g., 813.6 김12가) and the 'title'.
@@ -162,6 +165,40 @@ def calculate_lis_misplacement(scanned_books):
         
     return scanned_books
 
+# 🚨 [수정된 부분 1: Master DB 기반 퍼지 매칭 함수 추가] 🚨
+# PostgreSQL의 levenshtein 함수를 이용하여 오타를 보정하고 정답 도서를 찾습니다.
+def correct_ocr_and_match_book(db, raw_call_number: str, location_id: str, threshold: float = 85.0):
+    clean_ocr = raw_call_number.strip()
+    if not clean_ocr:
+        return None
+
+    # 해당 서가(location_id)에 있는 책들과 편집 거리를 계산하여 가장 유사한 책 1권 추출
+    best_match_record = (
+        db.query(
+            BookMaster,
+            func.levenshtein(BookMaster.call_number, clean_ocr).label('distance')
+        )
+        .filter(BookMaster.assigned_loc_id == location_id)
+        .order_by('distance')
+        .first()
+    )
+
+    if best_match_record:
+        matched_book, distance = best_match_record
+        db_call_number = matched_book.call_number
+        
+        # 편집 거리를 퍼센트(%) 유사도로 변환
+        max_len = max(len(clean_ocr), len(db_call_number))
+        similarity = ((max_len - distance) / max_len) * 100 if max_len > 0 else 0.0
+
+        if similarity >= threshold:
+            print(f"[OCR 보정 성공] 원본: '{clean_ocr}' -> 보정: '{db_call_number}' (일치율: {similarity:.1f}%)")
+            return matched_book
+        else:
+            print(f"[OCR 보정 실패] 원본: '{clean_ocr}' (유사도 미달: {similarity:.1f}%)")
+            
+    return None
+# --------------------------------------------------------
 
 # --- 메인 파이프라인 ---
 
@@ -188,7 +225,7 @@ def process_scan_session(session_id, original_file_name): # 파라미터 이름 
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
         print(f"[{session_id}] 2. YOLO 추론 시작...")
-        results = yolo_model(img, conf=0.5) 
+        results = yolo_model(img, conf=0.6) 
         
         boxes = results[0].boxes
         masks = results[0].masks # [수정됨] 마스크 데이터 추출
@@ -230,27 +267,44 @@ def process_scan_session(session_id, original_file_name): # 파라미터 이름 
                 base64_image = base64.b64encode(buffer).decode('utf-8')
                 
                 print(f"  - Gemma OCR 요청 중... (Crop {idx})")
-                vlm_data = extract_text_with_gemma(base64_image)
+                # Gemma4 호출 -> 딕셔너리 반환
+                raw_ocr_dict = call_gemma4_ocr(crop_b64)
+
+                # 🚨 [수정된 부분 2: 추출 직후 DB 매칭을 통한 자동 보정 수행] 🚨
+                # 기존에는 단순히 문자열만 분리했지만, 이제는 딕셔너리 원본은 유지하고 청구기호만 꺼내서 보정에 사용합니다.
+                raw_call_number = raw_ocr_dict.get("call_number", "")
+                matched_book = correct_ocr_and_match_book(db, raw_call_number, session.location_id)
                 
                 scanned_results.append({
                     "bounding_box": {"x": x1, "y": y1, "w": w, "h": h},
-                    "extracted_call_number": vlm_data.get("call_number", ""),
-                    "extracted_title": vlm_data.get("title", ""),
+                    "raw_ocr_data": raw_ocr_dict,            # <--- 원시 JSON 데이터를 통째로 유지
+                    "matched_book_id": matched_book.book_id if matched_book else None, # <--- 보정된 정답 도서 ID 저장
                     "confidence": int(box.conf[0] * 100),
                     "crop_url": crop_url 
                 })
             
-        print(f"[{session_id}] 4. LIS 알고리즘 기반 오배열 판별 중...")
-        final_results = calculate_lis_misplacement(scanned_results)
+        print(f"[{session_id}] 4.X 좌표 기반 오배열 판별 중...")
+
+        # 🚨 X 좌표 기준으로 정렬 (실제 책이 꽂힌 순서)
+        final_results = scanned_results.sort(key=lambda x: x["bounding_box"]["x"])
+
+        #  🚨 임시로 모두 PENDING 처리 (또는 calculate_lis_misplacement 수행)
+        for item in final_results:
+            item["status"] = "PENDING"
         
         print(f"[{session_id}] 5. 분석 결과 DB 저장 중...")
         for idx, result in enumerate(final_results):
             det_id = f"{session_id}-det-{idx}"
+            
+            # 🚨 [수정된 부분 3: ScanResultDetail 생성 시 파라미터 매핑 변경] 🚨
+            # ocr_text 대신 JSONB 컬럼에 모델이 수정한 원본 dict(raw_ocr_data)를 주입합니다.
             new_detail = ScanResultDetail(
                 detection_id=det_id,
                 session_id=session_id,
                 bounding_box=result["bounding_box"],
-                ocr_text=result["extracted_call_number"],
+                row_ocr_data=result["row_ocr_data"],
+                matched_book_id=result["matched_book_id"], 
+                detected_order=idx + 1, 
                 status=result["status"],
                 confidence=result["confidence"]
             )
