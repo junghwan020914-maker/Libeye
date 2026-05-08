@@ -268,7 +268,7 @@ def process_scan_session(session_id, original_file_name): # 파라미터 이름 
                 
                 print(f"  - Gemma OCR 요청 중... (Crop {idx})")
                 # Gemma4 호출 -> 딕셔너리 반환
-                raw_ocr_dict = call_gemma4_ocr(crop_b64)
+                raw_ocr_dict = extract_text_with_gemma(base64_image)
 
                 # 🚨 [수정된 부분 2: 추출 직후 DB 매칭을 통한 자동 보정 수행] 🚨
                 # 기존에는 단순히 문자열만 분리했지만, 이제는 딕셔너리 원본은 유지하고 청구기호만 꺼내서 보정에 사용합니다.
