@@ -70,7 +70,7 @@ class ScanResultDetail(Base):
     status = Column(String(20), nullable=False, default="PENDING")
     
     # AI 인식 신뢰도 점수
-    confidence = Column(Float, default=0.0)
+    confidence = Column(Integer, default=0)
 
     # 양방향 관계(Relationship) 설정
     session = relationship("ScanSession", back_populates="results")
