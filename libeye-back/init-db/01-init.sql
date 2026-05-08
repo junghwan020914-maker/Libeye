@@ -54,7 +54,10 @@ CREATE TABLE Scan_Result_Detail (
     
     -- [핵심 변경] AI가 추출한 원본 JSON 데이터 저장 (도서명, 청구기호 등)
     -- 예: {"title": "나미야 잡화점", "call_number": "813.6 히15나"}
-    raw_ocr_data JSONB,
+    -- raw_ocr_data JSONB,
+    -- 🚨 수정: 개별 VARCHAR 컬럼으로 변경
+    raw_ocr_title VARCHAR(255),
+    raw_ocr_call_number VARCHAR(100),
     
     confidence DECIMAL(5,2),
     bounding_box JSONB, -- AR 오버레이 및 프론트엔드 확장을 위한 JSONB 타입 적용 {x, y, w, h}
