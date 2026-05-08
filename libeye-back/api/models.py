@@ -76,7 +76,9 @@ class ScanResultDetail(Base):
     
     # AI 인식 신뢰도 점수
     confidence = Column(Integer, default=0)
-
+    
+    crop_image_url = Column(String(255), nullable=True) 
+    
     # 양방향 관계(Relationship) 설정
     session = relationship("ScanSession", back_populates="results")
     book = relationship("BookMaster") # 매칭된 도서 객체에 ORM으로 바로 접근 가능
