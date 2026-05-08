@@ -32,11 +32,9 @@ async def get_scan_results(session_id: str, db: Session = Depends(get_db)):
             "detection_id": r.detection_id,
             "bounding_box": r.bounding_box,
             
-            # ✅ JSONB 딕셔너리에서 청구기호를 꺼내서 프론트엔드에 전달 (키가 없으면 빈 문자열)
-            "ocr_text": r.raw_ocr_data.get("call_number", "") if r.raw_ocr_data else "",
-            
-            # (선택) 프론트엔드에서 도서명도 쓸 수 있도록 원본 데이터를 통째로 넘겨주셔도 좋습니다.
-            "raw_ocr_data": r.raw_ocr_data, 
+            # 🚨 수정: 새로운 컬럼에서 직접 데이터를 가져옴
+            "ocr_title": r.raw_ocr_title,
+            "ocr_call_number": r.raw_ocr_call_number,
             
             "status": r.status,
             "matched_book_id": r.matched_book_id
