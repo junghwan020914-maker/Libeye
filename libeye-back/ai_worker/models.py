@@ -63,7 +63,7 @@ class ScanResultDetail(Base):
     # raw_ocr_data = Column(JSONB)  <-- 삭제
     raw_ocr_title = Column(String(255))        # AI가 읽은 원본 제목
     raw_ocr_call_number = Column(String(100))  # AI가 읽은 원본 청구기호
-
+    
     # 2. 보정된 정답 데이터 연결 (DB Master 연동)
     # 이 ID를 통해 BookMaster의 정답 title, call_number를 JOIN해서 가져옵니다.
     matched_book_id = Column(String(50), ForeignKey('book_master.book_id'), nullable=True)
@@ -76,6 +76,8 @@ class ScanResultDetail(Base):
     
     # AI 인식 신뢰도 점수
     confidence = Column(Integer, default=0)
+
+    crop_image_url = Column(String(255), nullable=True) 
 
     # 양방향 관계(Relationship) 설정
     session = relationship("ScanSession", back_populates="results")
