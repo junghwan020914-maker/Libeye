@@ -304,7 +304,9 @@ def process_scan_session(session_id, original_file_name): # 파라미터 이름 
                 detection_id=det_id,
                 session_id=session_id,
                 bounding_box=result["bounding_box"],
-                raw_ocr_data=result["raw_ocr_data"],
+                # 🚨 수정: 딕셔너리에서 값을 꺼내 개별 컬럼에 주입
+                raw_ocr_title=ocr_dict.get("title", ""),
+                raw_ocr_call_number=ocr_dict.get("call_number", ""),
                 matched_book_id=result["matched_book_id"], 
                 detected_order=idx + 1, 
                 status=result["status"],
