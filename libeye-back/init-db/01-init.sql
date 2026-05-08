@@ -42,6 +42,7 @@ CREATE TABLE Scan_Session (
     status VARCHAR(20) DEFAULT 'PENDING',
     lux_level INT,
     overall_status VARCHAR(20) NOT NULL, -- COMPLETED, NEEDS_ACTION
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     is_image_deleted BOOLEAN DEFAULT FALSE -- 온프레미스 스토리지 정책(7일 후 삭제) 반영 컬럼
 );
 
