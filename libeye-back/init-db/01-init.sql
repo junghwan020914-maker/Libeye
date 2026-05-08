@@ -58,6 +58,8 @@ CREATE TABLE Scan_Result_Detail (
     -- 🚨 수정: 개별 VARCHAR 컬럼으로 변경
     raw_ocr_title VARCHAR(255),
     raw_ocr_call_number VARCHAR(100),
+
+    crop_image_url VARCHAR(255),
     
     confidence DECIMAL(5,2),
     bounding_box JSONB, -- AR 오버레이 및 프론트엔드 확장을 위한 JSONB 타입 적용 {x, y, w, h}
