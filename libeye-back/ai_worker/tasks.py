@@ -312,7 +312,9 @@ def process_scan_session(session_id, original_file_name): # 파라미터 이름 
                 matched_book_id=result["matched_book_id"], 
                 detected_order=idx + 1, 
                 status=result["status"],
-                confidence=result["confidence"]
+                confidence=result["confidence"],
+                # 🚨 [수정된 부분] 3단계에서 생성했던 crop_url을 매핑합니다.
+                crop_image_url=result.get("crop_url") 
             )
             db.add(new_detail)
         
