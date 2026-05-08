@@ -297,6 +297,8 @@ def process_scan_session(session_id, original_file_name): # 파라미터 이름 
         print(f"[{session_id}] 5. 분석 결과 DB 저장 중...")
         for idx, result in enumerate(final_results):
             det_id = f"{session_id}-det-{idx}"
+
+            current_ocr_data = result.get("raw_ocr_data", {})
             
             # 🚨 [수정된 부분 3: ScanResultDetail 생성 시 파라미터 매핑 변경] 🚨
             # ocr_text 대신 JSONB 컬럼에 모델이 수정한 원본 dict(raw_ocr_data)를 주입합니다.
@@ -305,8 +307,8 @@ def process_scan_session(session_id, original_file_name): # 파라미터 이름 
                 session_id=session_id,
                 bounding_box=result["bounding_box"],
                 # 🚨 수정: 딕셔너리에서 값을 꺼내 개별 컬럼에 주입
-                raw_ocr_title=raw_ocr_dict.get("title", ""),
-                raw_ocr_call_number=raw_ocr_dict.get("call_number", ""),
+                raw_ocr_title=current_ocr_data.get("title", ""),
+                raw_ocr_call_number=current_ocr_data.get("call_number", ""),
                 matched_book_id=result["matched_book_id"], 
                 detected_order=idx + 1, 
                 status=result["status"],
