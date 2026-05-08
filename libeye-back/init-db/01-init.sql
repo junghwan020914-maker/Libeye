@@ -36,12 +36,12 @@ CREATE TABLE Book_Master (
 CREATE TABLE Scan_Session (
     session_id VARCHAR(50) PRIMARY KEY, -- ✅ 파이썬의 String(50)과 일치시킴
     location_id VARCHAR(50) REFERENCES Library_Master(location_id),
-    user_id VARCHAR(50) NOT NULL,
+    -- user_id VARCHAR(50) NOT NULL, 스캔 사용자 아직 반영 안됨.
     scan_time TIMESTAMP DEFAULT NOW(),
     image_url VARCHAR(500) NOT NULL,
     status VARCHAR(20) DEFAULT 'PENDING',
     lux_level INT,
-    overall_status VARCHAR(20) NOT NULL, -- COMPLETED, NEEDS_ACTION
+    -- overall_status VARCHAR(20) NOT NULL, -- COMPLETED, NEEDS_ACTION
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     is_image_deleted BOOLEAN DEFAULT FALSE -- 온프레미스 스토리지 정책(7일 후 삭제) 반영 컬럼
 );
