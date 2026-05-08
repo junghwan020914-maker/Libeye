@@ -47,7 +47,11 @@ CREATE TABLE Scan_Result_Detail (
     detection_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     session_id UUID REFERENCES Scan_Session(session_id) ON DELETE CASCADE, -- 세션 삭제 시 연쇄 삭제
     matched_book_id VARCHAR(50) REFERENCES Book_Master(book_id), -- 미인식/초과 시 NULL 가능
-    ocr_text VARCHAR(100),
+    
+    -- [핵심 변경] AI가 추출한 원본 JSON 데이터 저장 (도서명, 청구기호 등)
+    -- 예: {"title": "나미야 잡화점", "call_number": "813.6 히15나"}
+    raw_ocr_data JSONB,
+    
     confidence DECIMAL(5,2),
     bounding_box JSONB, -- AR 오버레이 및 프론트엔드 확장을 위한 JSONB 타입 적용 {x, y, w, h}
     detected_order INT NOT NULL,
@@ -77,3 +81,9 @@ CREATE INDEX idx_book_master_call_num_trgm ON Book_Master USING gin (call_number
 
 -- (선택) 상태값 기준 조회가 빈번할 경우를 대비한 기본 인덱스
 CREATE INDEX idx_scan_session_status ON Scan_Session (overall_status);
+
+-- 퍼지 매칭(Levenshtein 거리 계산) 활성화
+CREATE EXTENSION IF NOT EXISTS fuzzystrmatch;
+
+-- Trigram 유사도 검색 활성화
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
