@@ -59,7 +59,10 @@ class ScanResultDetail(Base):
 
     # 1. AI 원본 데이터 (Gemma4가 추출한 책 제목, 청구기호 통째로 저장)
     # 예: {"title": "나미야 잡화점의 기적", "call_number": "813.6 히15나"}
-    raw_ocr_data = Column(JSONB)
+    # 🚨 수정: JSONB 대신 개별 컬럼으로 분리
+    # raw_ocr_data = Column(JSONB)  <-- 삭제
+    raw_ocr_title = Column(String(255))        # AI가 읽은 원본 제목
+    raw_ocr_call_number = Column(String(100))  # AI가 읽은 원본 청구기호
 
     # 2. 보정된 정답 데이터 연결 (DB Master 연동)
     # 이 ID를 통해 BookMaster의 정답 title, call_number를 JOIN해서 가져옵니다.
