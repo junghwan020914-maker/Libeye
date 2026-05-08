@@ -3,6 +3,8 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- OCR 텍스트(청구기호)의 Fuzzy Matching(유사도 검색) 성능을 극대화하기 위한 Trigram 확장
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
+-- 퍼지 매칭(Levenshtein 거리 계산) 활성화
+CREATE EXTENSION IF NOT EXISTS fuzzystrmatch;
 
 -- 2. 마스터 테이블 생성
 
@@ -37,6 +39,7 @@ CREATE TABLE Scan_Session (
     user_id VARCHAR(50) NOT NULL,
     scan_time TIMESTAMP DEFAULT NOW(),
     image_url VARCHAR(500) NOT NULL,
+    status VARCHAR(20) DEFAULT 'PENDING',
     lux_level INT,
     overall_status VARCHAR(20) NOT NULL, -- COMPLETED, NEEDS_ACTION
     is_image_deleted BOOLEAN DEFAULT FALSE -- 온프레미스 스토리지 정책(7일 후 삭제) 반영 컬럼
@@ -81,9 +84,3 @@ CREATE INDEX idx_book_master_call_num_trgm ON Book_Master USING gin (call_number
 
 -- (선택) 상태값 기준 조회가 빈번할 경우를 대비한 기본 인덱스
 CREATE INDEX idx_scan_session_status ON Scan_Session (overall_status);
-
--- 퍼지 매칭(Levenshtein 거리 계산) 활성화
-CREATE EXTENSION IF NOT EXISTS fuzzystrmatch;
-
--- Trigram 유사도 검색 활성화
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
