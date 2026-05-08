@@ -28,6 +28,8 @@ class BookMaster(Base):
     title = Column(String(255), nullable=False)
     author = Column(String(100))
     assigned_loc_id = Column(String(50), ForeignKey('library_master.location_id'))
+    # 🚨 [추가해야 할 부분] 서가 내 올바른 순서 (오배열 판별용)
+    expected_order = Column(Integer)
 
 # 3. Scan_Session (AI 분석 세션 관리)
 class ScanSession(Base):
