@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 export const api = axios.create({
-  baseURL: 'https://pyramidlike-distendedly-debroah.ngrok-free.dev', 
+  baseURL: '/api', 
   timeout: 60000, // AI 모델 처리가 오래 걸릴 수 있으므로 60초 대기
   headers: {
     'Content-Type': 'application/json',

@@ -4,10 +4,13 @@ import vue from '@vitejs/plugin-vue'
 export default defineConfig({
   plugins: [vue()],
   server: {
-    host: '0.0.0.0', // Docker 외부에서 접근 가능하도록 설정
+    host: '0.0.0.0',
     port: 5173,
-    watch: {
-      usePolling: true, // 파일 변경 감지 강제 (Docker 환경 필수)
+    proxy: {
+      '/api': {
+        // 백엔드 컨테이너가 열어둔 우분투 IP와 포트로 토스!
+        target: 'http://210.94.222.176:8000', 
+        changeOrigin: true,
+      }
     }
   }
-})

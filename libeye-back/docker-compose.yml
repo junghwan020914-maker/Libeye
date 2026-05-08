@@ -108,7 +108,7 @@ services:
     # libeye-api(FastAPI) 컨테이너의 8000 포트를 외부로 연결
     command:
       - "http"
-      - "api:8000" # 주의: 본인의 FastAPI 서비스 이름이 'api'가 아니라면 그 이름으로 맞춰주세요.
+      - "210.94.222.176:5173" # 백엔드(8000)가 아니라 프론트엔드(5173)를 바라보도록 수정!
     environment:
       # 여기에 아까 복사한 본인의 Authtoken을 붙여넣으세요!
       - NGROK_AUTHTOKEN=3BTTdOr7CaswL3LriIefCKQcMlv_3VtBBpR5Z8VDaQaziFDuH
