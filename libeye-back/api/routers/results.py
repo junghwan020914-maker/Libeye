@@ -31,7 +31,13 @@ async def get_scan_results(session_id: str, db: Session = Depends(get_db)):
         detections.append({
             "detection_id": r.detection_id,
             "bounding_box": r.bounding_box,
-            "ocr_text": r.ocr_text,
+            
+            # ✅ JSONB 딕셔너리에서 청구기호를 꺼내서 프론트엔드에 전달 (키가 없으면 빈 문자열)
+            "ocr_text": r.raw_ocr_data.get("call_number", "") if r.raw_ocr_data else "",
+            
+            # (선택) 프론트엔드에서 도서명도 쓸 수 있도록 원본 데이터를 통째로 넘겨주셔도 좋습니다.
+            "raw_ocr_data": r.raw_ocr_data, 
+            
             "status": r.status,
             "matched_book_id": r.matched_book_id
         })
