@@ -13,6 +13,8 @@ services:
       - "5432:5432" # 외부 DB 툴(DBeaver 등) 접속 허용
     volumes:
       - ./postgres_data:/var/lib/postgresql/data
+      # 👇 여기에 아래 한 줄을 추가합니다. (방금 만든 파일을 컨테이너 내부로 연결)
+      - ./init-db/01-init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - libeye-network
 
