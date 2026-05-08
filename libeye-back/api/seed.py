@@ -4,7 +4,7 @@ from sqlalchemy.orm import sessionmaker
 
 # 현재 프로젝트의 models와 database 구조를 임포트합니다.
 from database import Base
-from models import LibraryMaster, BookMaster
+from models import LibraryMaster, BookMaster, ScanSession, ScanResultDetail
 
 # 환경변수에서 DB URL을 가져오거나, 로컬 테스트용 기본값을 사용합니다.
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:capstone123@postgres:5432/capstone_db")
@@ -51,7 +51,8 @@ def seed_database():
                 call_number="813.6 김12가",
                 title="테스트 도서 A",
                 author="김작가",
-                assigned_loc_id="LOC-A-1-3" # 위에서 만든 위치에 배정
+                assigned_loc_id="LOC-A-1-3", # 위에서 만든 위치에 배정
+                expected_order="1"
             ),
             BookMaster(
                 book_id="BOOK-002",
@@ -59,7 +60,8 @@ def seed_database():
                 call_number="813.6 김15나",
                 title="테스트 도서 B",
                 author="김작가",
-                assigned_loc_id="LOC-A-1-3"
+                assigned_loc_id="LOC-A-1-3",
+                expected_order="2"
             ),
             BookMaster(
                 book_id="BOOK-003",
@@ -67,7 +69,8 @@ def seed_database():
                 call_number="813.6 박11다",
                 title="테스트 도서 C",
                 author="박작가",
-                assigned_loc_id="LOC-A-1-3"
+                assigned_loc_id="LOC-A-1-3",
+                expected_order="3"
             ),
             BookMaster(
                 book_id="BOOK-004",
@@ -75,7 +78,8 @@ def seed_database():
                 call_number="813.6 이21라",
                 title="테스트 도서 D",
                 author="이작가",
-                assigned_loc_id="LOC-A-1-3"
+                assigned_loc_id="LOC-A-1-3",
+                expected_order="4"
             )
         ]
         
