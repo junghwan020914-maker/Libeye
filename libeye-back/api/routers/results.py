@@ -37,7 +37,10 @@ async def get_scan_results(session_id: str, db: Session = Depends(get_db)):
             "ocr_call_number": r.raw_ocr_call_number,
             
             "status": r.status,
-            "matched_book_id": r.matched_book_id
+            "matched_book_id": r.matched_book_id,
+            # 🚨 [수정된 부분] 프론트엔드로 URL 전달
+            "crop_image_url": r.crop_image_url
+            "confidence": r.confidence
         })
     
     return {
