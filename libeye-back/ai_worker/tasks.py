@@ -304,7 +304,7 @@ def process_scan_session(session_id, original_file_name): # 파라미터 이름 
                 detection_id=det_id,
                 session_id=session_id,
                 bounding_box=result["bounding_box"],
-                row_ocr_data=result["raw_ocr_data"],
+                raw_ocr_data=result["raw_ocr_data"],
                 matched_book_id=result["matched_book_id"], 
                 detected_order=idx + 1, 
                 status=result["status"],
