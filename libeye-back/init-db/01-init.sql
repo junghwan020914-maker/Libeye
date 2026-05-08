@@ -34,7 +34,7 @@ CREATE TABLE Book_Master (
 
 -- 3.1 스캔 세션 로그 테이블 (Scan_Session)
 CREATE TABLE Scan_Session (
-    session_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    session_id VARCHAR(50) PRIMARY KEY, -- ✅ 파이썬의 String(50)과 일치시킴
     location_id VARCHAR(50) REFERENCES Library_Master(location_id),
     user_id VARCHAR(50) NOT NULL,
     scan_time TIMESTAMP DEFAULT NOW(),
@@ -47,8 +47,8 @@ CREATE TABLE Scan_Session (
 
 -- 3.2 AI 인식 상세 결과 테이블 (Scan_Result_Detail)
 CREATE TABLE Scan_Result_Detail (
-    detection_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    session_id UUID REFERENCES Scan_Session(session_id) ON DELETE CASCADE, -- 세션 삭제 시 연쇄 삭제
+    detection_id VARCHAR(50) PRIMARY KEY, -- ✅ 변경
+    session_id VARCHAR(50) REFERENCES Scan_Session(session_id) ON DELETE CASCADE, -- 세션 삭제 시 연쇄 삭제
     matched_book_id VARCHAR(50) REFERENCES Book_Master(book_id), -- 미인식/초과 시 NULL 가능
     
     -- [핵심 변경] AI가 추출한 원본 JSON 데이터 저장 (도서명, 청구기호 등)
@@ -63,8 +63,8 @@ CREATE TABLE Scan_Result_Detail (
 
 -- 3.3 수동 수정 이력 테이블 (Manual_Correction)
 CREATE TABLE Manual_Correction (
-    correction_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    detection_id UUID REFERENCES Scan_Result_Detail(detection_id),
+    correction_id VARCHAR(50) PRIMARY KEY DEFAULT VARCHAR(50),
+    detection_id VARCHAR(50) REFERENCES Scan_Result_Detail(detection_id),
     user_id VARCHAR(50) NOT NULL,
     corrected_book_id VARCHAR(50) REFERENCES Book_Master(book_id),
     correction_time TIMESTAMP DEFAULT NOW(),
