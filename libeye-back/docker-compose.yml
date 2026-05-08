@@ -117,7 +117,15 @@ services:
     networks:
       - libeye-network
 
-
+# 8. Adminer (웹 기반 DB 관리 도구)
+  adminer:
+    image: adminer
+    container_name: libeye-adminer
+    restart: always
+    ports:
+      - "8080:8080"
+    networks:
+      - libeye-network
 
 networks:
   libeye-network:
