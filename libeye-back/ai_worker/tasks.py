@@ -286,7 +286,9 @@ def process_scan_session(session_id, original_file_name): # 파라미터 이름 
         print(f"[{session_id}] 4.X 좌표 기반 오배열 판별 중...")
 
         # 🚨 X 좌표 기준으로 정렬 (실제 책이 꽂힌 순서)
-        final_results = scanned_results.sort(key=lambda x: x["bounding_box"]["x"])
+        # ✅ [수정 1] sort()는 원본을 변경하므로 분리해서 작성합니다.
+        scanned_results.sort(key=lambda x: x["bounding_box"]["x"])
+        final_results = scanned_results  # 이제 final_results에 제대로 정렬된 리스트가 들어갑니다.
 
         #  🚨 임시로 모두 PENDING 처리 (또는 calculate_lis_misplacement 수행)
         for item in final_results:
@@ -302,7 +304,7 @@ def process_scan_session(session_id, original_file_name): # 파라미터 이름 
                 detection_id=det_id,
                 session_id=session_id,
                 bounding_box=result["bounding_box"],
-                row_ocr_data=result["row_ocr_data"],
+                row_ocr_data=result["raw_ocr_data"],
                 matched_book_id=result["matched_book_id"], 
                 detected_order=idx + 1, 
                 status=result["status"],
