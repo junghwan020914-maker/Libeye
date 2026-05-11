@@ -1,10 +1,4 @@
--- 02-seed-data.sql
--- BookDB.xlsx 기반 초기 시드 데이터 주입 스크립트 (총 369권)
 
--- =========================================================================
--- 1. 위치/서가 마스터 (Library_Master) 데이터 주입
--- =========================================================================
--- 중앙도서관 3층 인문과학실 A열/B열 서가 데이터
 
 INSERT INTO Library_Master (location_id, floor, room_name, section, shelf_num, level_num, is_active) VALUES
 ('LOC-A-1-1', 3, '인문과학실', 'A열', 1, 1, TRUE),
@@ -18,10 +12,7 @@ INSERT INTO Library_Master (location_id, floor, room_name, section, shelf_num, l
 ('LOC-B-1-4', 3, '인문과학실', 'B열', 1, 4, TRUE),
 ('LOC-B-1-5', 3, '인문과학실', 'B열', 1, 5, TRUE);
 
--- =========================================================================
--- 2. 도서 마스터 (Book_Master) 데이터 주입
--- =========================================================================
--- BookDB.xlsx에서 추출한 369권의 실제 도서 데이터
+
 
 INSERT INTO Book_Master (book_id, barcode, call_number, title, author, assigned_loc_id, expected_order) VALUES
 ('BOOK-0001', '88000000001', '001.3 박72ㅂ', '반전의 품격: 통쾌하거나 찝찝하거나 찌질하거나 위대하거나', NULL, 'LOC-A-1-1', 1),
