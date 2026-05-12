@@ -35,9 +35,11 @@ def process_scan_session(session_id: str, original_file_name: str):
 
     try:
         session = db.query(ScanSession).filter(ScanSession.session_id == session_id).first()
-        if session:
-            session.status = "PROCESSING"
-            db.commit()
+        if session is None:
+            return {"status": "error", "message": f"세션 없음: {session_id}"}
+
+        session.status = "PROCESSING"
+        db.commit()
 
         # 1. MinIO에서 원본 이미지 다운로드
         print(f"[{session_id}] 1. 원본 이미지 다운로드")
