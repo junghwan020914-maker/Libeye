@@ -13,7 +13,7 @@ from database import get_db, engine, Base
 import models
 from seed import seed_database
 from contextlib import asynccontextmanager
-from routers import results
+from routers import results, image_proxy
 
 # --- Celery 워커 연결 설정 ---
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
@@ -47,6 +47,7 @@ app.add_middleware(
 )
 
 app.include_router(results.router)
+app.include_router(image_proxy.router)
 
 # --- [수정됨] 세션 생성 시 이미지 Base64를 받아 AI 워커로 전달 ---
 class SessionCreateRequest(BaseModel):

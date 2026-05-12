@@ -67,9 +67,10 @@ services:
       - DATABASE_URL=postgresql://libeye_admin:libeye_admin_pwd@postgres/libeye_db
       - REDIS_URL=redis://redis:6379/0
       - MINIO_URL=http://minio:9000
-      # ⬇️ ngrok으로 MinIO를 외부에 노출할 때 사용하는 공개 URL
-      # ngrok 대시보드(localhost:4040)에서 minio 터널의 URL을 확인 후 여기에 입력하세요
-      - MINIO_PUBLIC_URL=https://pyramidlike-distendedly-debroah.ngrok-free.dev
+      # 프록시용 MinIO 접속 정보 (FastAPI가 내부에서 MinIO에 직접 접근)
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=admin
+      - MINIO_SECRET_KEY=admin1234
     ports:
       - "8000:8000" # 프론트엔드 대시보드 통신용
     depends_on:
