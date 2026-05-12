@@ -28,6 +28,10 @@ async def get_scan_results(session_id: str, db: Session = Depends(get_db)):
     
     detections = []
     for r in results:
+        crop_url = r.crop_image_url
+        if crop_url:
+            crop_url = crop_url.replace("minio:9000", "pyramidlike-distendedly-debroah.ngrok-free.dev:9000")
+
         detections.append({
             "detection_id": r.detection_id,
             "bounding_box": r.bounding_box,
@@ -39,13 +43,17 @@ async def get_scan_results(session_id: str, db: Session = Depends(get_db)):
             "status": r.status,
             "matched_book_id": r.matched_book_id,
             # 🚨 [수정된 부분] 프론트엔드로 URL 전달
-            "crop_image_url": r.crop_image_url,
+            "crop_image_url": crop_url,
             "confidence": r.confidence
         })
     
+    session_image_url = session_info.image_url
+    if session_image_url:
+        session_image_url = session_image_url.replace("minio:9000", "pyramidlike-distendedly-debroah.ngrok-free.dev:9000")
+
     return {
         "session_id": session_id,
-        "image_url": session_info.image_url,
+        "image_url": session_image_url,
         "status": session_info.status,
         "detections": detections
     }
