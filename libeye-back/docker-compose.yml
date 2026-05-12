@@ -116,6 +116,7 @@ services:
       - NGROK_AUTHTOKEN=3BTTdOr7CaswL3LriIefCKQcMlv_3VtBBpR5Z8VDaQaziFDuH
     ports:
       - "4040:4040" # ngrok 대시보드 포트
+      - "9000:9000" # ngrok to minio
     networks:
       - libeye-network
 
