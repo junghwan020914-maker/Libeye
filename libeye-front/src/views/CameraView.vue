@@ -183,20 +183,27 @@ const applyCropAndUpload = async () => {
   const scaleX = uploadedImage.value.width / drawW;
   const scaleY = uploadedImage.value.height / drawH;
   
-  const sourceX = (ix - offsetX) * scaleX;
-  const sourceY = (iy - offsetY) * scaleY;
-  const sourceW = iw * scaleX;
-  const sourceH = ih * scaleY;
+  const sourceX = Math.max(0, (ix - offsetX) * scaleX);
+  const sourceY = Math.max(0, (iy - offsetY) * scaleY);
+  const sourceW = Math.max(1, iw * scaleX);
+  const sourceH = Math.max(1, ih * scaleY);
   
-  canvas.width = sourceW;
-  canvas.height = sourceH;
+  canvas.width = Math.floor(sourceW);
+  canvas.height = Math.floor(sourceH);
   
-  ctx.drawImage(uploadedImage.value, sourceX, sourceY, sourceW, sourceH, 0, 0, sourceW, sourceH);
+  ctx.drawImage(uploadedImage.value, sourceX, sourceY, sourceW, sourceH, 0, 0, canvas.width, canvas.height);
   const croppedDataUrl = canvas.toDataURL('image/jpeg', 0.9);
+  
+  if (!croppedDataUrl.includes(',')) {
+    alert('이미지 크롭에 실패했습니다.');
+    return;
+  }
   
   isUploading.value = true;
   try {
     const base64Image = croppedDataUrl.split(',')[1];
+    if (!base64Image) throw new Error("Invalid base64 payload");
+    
     const response = await startSession('LOC-A-1-3', base64Image);
     router.push({ name: 'detail', query: { sessionId: response.session_id } });
   } catch (err) {
