@@ -35,6 +35,23 @@ const cropRect = computed(() => {
   return { x, y, w, h };
 });
 
+const enterFullScreen = () => {
+  const elem = document.documentElement;
+  if (elem.requestFullscreen) {
+    elem.requestFullscreen().catch(err => {
+      console.warn(`Error attempting to enable fullscreen: ${err.message}`);
+    });
+  }
+};
+
+const exitFullScreen = () => {
+  if (document.fullscreenElement) {
+    document.exitFullscreen().catch(err => {
+      console.warn(`Error attempting to disable fullscreen: ${err.message}`);
+    });
+  }
+};
+
 const startCamera = async () => {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
@@ -56,6 +73,11 @@ const stopCamera = () => {
   }
 };
 
+// 💡 HTML(new_dash2)의 동작 방식과 동일한 원본 변환 로직 (DirectUploader 참조)
+const getPureBase64 = (dataUrl: string): string => {
+  return dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
+};
+
 const takePhoto = async () => {
   if (!videoRef.value || !canvasRef.value) return;
   
@@ -71,13 +93,13 @@ const takePhoto = async () => {
   const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
   previewUrl.value = dataUrl;
   
-  // Stop camera stream to freeze frame
   stopCamera();
   
-  // Upload logic
   isUploading.value = true;
   try {
-    const base64Image = dataUrl.split(',')[1];
+    const base64Image = getPureBase64(dataUrl);
+    if (!base64Image) throw new Error("Base64 string is empty");
+    
     const response = await startSession('LOC-A-1-3', base64Image);
     const sessionId = response.session_id;
     
@@ -87,7 +109,7 @@ const takePhoto = async () => {
     alert('업로드 중 오류가 발생했습니다.');
     isUploading.value = false;
     previewUrl.value = null;
-    startCamera(); // restart camera
+    startCamera();
   }
 };
 
@@ -201,7 +223,8 @@ const applyCropAndUpload = async () => {
   
   isUploading.value = true;
   try {
-    const base64Image = croppedDataUrl.split(',')[1];
+    // DirectUploader 방식 적용
+    const base64Image = getPureBase64(croppedDataUrl);
     if (!base64Image) throw new Error("Invalid base64 payload");
     
     const response = await startSession('LOC-A-1-3', base64Image);
@@ -227,12 +250,18 @@ const simulateCapture = async () => {
 };
 
 onMounted(() => {
+  // Remove max-w-md constraint so camera fills the screen horizontally in landscape
+  document.getElementById('app')?.classList.remove('max-w-md');
+  enterFullScreen();
   startCamera();
   const mq = window.matchMedia("(orientation: portrait)");
   mq.addEventListener("change", handleOrientationChange);
 });
 
 onBeforeUnmount(() => {
+  // Restore the original layout constraint
+  document.getElementById('app')?.classList.add('max-w-md');
+  exitFullScreen();
   stopCamera();
   const mq = window.matchMedia("(orientation: portrait)");
   mq.removeEventListener("change", handleOrientationChange);
