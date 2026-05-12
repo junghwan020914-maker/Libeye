@@ -250,8 +250,8 @@ const simulateCapture = async () => {
 };
 
 onMounted(() => {
-  // Remove max-w-md constraint so camera fills the screen horizontally in landscape
-  document.getElementById('app')?.classList.remove('max-w-md');
+  // body에 camera-mode 추가 → #app max-width 제약 해제 (가로모드 전체 너비 대응)
+  document.body.classList.add('camera-mode');
   enterFullScreen();
   startCamera();
   const mq = window.matchMedia("(orientation: portrait)");
@@ -259,8 +259,8 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
-  // Restore the original layout constraint
-  document.getElementById('app')?.classList.add('max-w-md');
+  // 카메라 떠날 때 camera-mode 제거 → 원래 레이아웃 복원
+  document.body.classList.remove('camera-mode');
   exitFullScreen();
   stopCamera();
   const mq = window.matchMedia("(orientation: portrait)");
