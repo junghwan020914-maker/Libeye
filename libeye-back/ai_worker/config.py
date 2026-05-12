@@ -5,7 +5,7 @@ CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://redis:6379/0
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql://postgres:capstone123@postgres:5432/capstone_db"
+    "postgresql://postgres:capstone123@postgres:5432/libeye_db"
 )
 
 MINIO_ENDPOINT = os.getenv("MINIO_URL", "http://minio:9000")
