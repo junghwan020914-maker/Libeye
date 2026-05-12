@@ -10,7 +10,7 @@ from storage import s3_client, ensure_buckets_exist, upload_image, download_imag
 from service.detector import yolo_model, run_detection, crop_spine
 from service.ocr import extract_text_with_gemma
 from service.matcher import match_book_by_call_number
-from misplacement import detect_misplacements
+from service.misplacement import detect_misplacements
 from models import ScanSession, ScanResultDetail
 
 # --- 앱 초기화 ---
@@ -75,7 +75,9 @@ def process_scan_session(session_id: str, original_file_name: str):
                 scanned_results.append({
                     "bounding_box": {"x": x1, "y": y1, "w": x2 - x1, "h": y2 - y1},
                     "raw_ocr_data": ocr_result,
-                    "matched_book_id": matched.book_id if matched else None,
+                    "matched_book_id":  matched.book_id         if matched else None,
+                    "assigned_loc_id":  matched.assigned_loc_id if matched else None,
+                    "expected_order":   matched.expected_order  if matched else None,
                     "confidence": int(box.conf[0] * 100),
                     "crop_url": crop_url,
                 })
@@ -83,7 +85,7 @@ def process_scan_session(session_id: str, original_file_name: str):
         # 6. x 좌표 정렬 + 오배열 판별
         print(f"[{session_id}] 6. 오배열 판별")
         scanned_results.sort(key=lambda r: r["bounding_box"]["x"])
-        final_results = detect_misplacements(scanned_results)
+        final_results = detect_misplacements(scanned_results, session.location_id if session else None)
 
         # 7. DB 저장
         print(f"[{session_id}] 7. 결과 저장")
