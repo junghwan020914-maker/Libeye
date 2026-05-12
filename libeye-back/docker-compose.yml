@@ -67,6 +67,9 @@ services:
       - DATABASE_URL=postgresql://libeye_admin:libeye_admin_pwd@postgres/libeye_db
       - REDIS_URL=redis://redis:6379/0
       - MINIO_URL=http://minio:9000
+      # ⬇️ ngrok으로 MinIO를 외부에 노출할 때 사용하는 공개 URL
+      # ngrok 대시보드(localhost:4040)에서 minio 터널의 URL을 확인 후 여기에 입력하세요
+      - MINIO_PUBLIC_URL=https://pyramidlike-distendedly-debroah.ngrok-free.dev
     ports:
       - "8000:8000" # 프론트엔드 대시보드 통신용
     depends_on:
@@ -102,21 +105,22 @@ services:
     networks:
       - libeye-network
 
-# 7. Ngrok (외부 접속용 터널링)
+# 7. Ngrok (외부 접속용 터널링) - 다중 터널: 프론트엔드 + MinIO
   ngrok:
     image: ngrok/ngrok:latest
     container_name: libeye-ngrok
     restart: unless-stopped
-    # libeye-api(FastAPI) 컨테이너의 8000 포트를 외부로 연결
+    # config 파일을 통해 프론트엔드와 MinIO 두 터널을 동시에 실행
     command:
-      - "http"
-      - "libeye-frontend:5173" # 백엔드(8000)가 아니라 프론트엔드(5173)를 바라보도록 수정!
+      - "start"
+      - "--all"
+      - "--config=/etc/ngrok.yml"
     environment:
-      # 여기에 아까 복사한 본인의 Authtoken을 붙여넣으세요!
       - NGROK_AUTHTOKEN=3BTTdOr7CaswL3LriIefCKQcMlv_3VtBBpR5Z8VDaQaziFDuH
+    volumes:
+      - ./ngrok.yml:/etc/ngrok.yml  # config 파일 마운트
     ports:
-      - "4040:4040" # ngrok 대시보드 포트
-      - "8440:9001" # ngrok to minio
+      - "4040:4040" # ngrok 웹 대시보드 포트 (터널 URL 확인용)
     networks:
       - libeye-network
 

@@ -1,11 +1,23 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+import os
 
 # 수정됨: api. 접두사 제거 (컨테이너 내에서는 api 폴더 안의 파일들이 최상위 경로임)
 from database import get_db 
 from models import ScanSession, ScanResultDetail
 
 router = APIRouter(prefix="/api/v1/sessions", tags=["Results"])
+
+# MinIO 내부 주소 → 외부 접근 가능한 URL로 교체 (ngrok 터널 URL)
+MINIO_INTERNAL = "http://minio:9000"
+MINIO_PUBLIC_URL = os.getenv("MINIO_PUBLIC_URL", "").rstrip("/")
+
+def _to_public_url(url: str) -> str:
+    """MinIO 내부 URL을 외부에서 접근 가능한 URL로 변환합니다."""
+    if not url or not MINIO_PUBLIC_URL:
+        return url
+    # http://minio:9000/... → https://xxxx.ngrok-free.app/...
+    return url.replace(MINIO_INTERNAL, MINIO_PUBLIC_URL)
 
 @router.get("/{session_id}/results")
 async def get_scan_results(session_id: str, db: Session = Depends(get_db)):
@@ -28,10 +40,6 @@ async def get_scan_results(session_id: str, db: Session = Depends(get_db)):
     
     detections = []
     for r in results:
-        crop_url = r.crop_image_url
-        if crop_url:
-            crop_url = crop_url.replace("minio:9000", "pyramidlike-distendedly-debroah.ngrok-free.dev:9000")
-
         detections.append({
             "detection_id": r.detection_id,
             "bounding_box": r.bounding_box,
@@ -42,18 +50,14 @@ async def get_scan_results(session_id: str, db: Session = Depends(get_db)):
             
             "status": r.status,
             "matched_book_id": r.matched_book_id,
-            # 🚨 [수정된 부분] 프론트엔드로 URL 전달
-            "crop_image_url": crop_url,
+            # 내부 MinIO URL → ngrok 공개 URL로 변환
+            "crop_image_url": _to_public_url(r.crop_image_url),
             "confidence": r.confidence
         })
     
-    session_image_url = session_info.image_url
-    if session_image_url:
-        session_image_url = session_image_url.replace("minio:9000", "pyramidlike-distendedly-debroah.ngrok-free.dev:9000")
-
     return {
         "session_id": session_id,
-        "image_url": session_image_url,
+        "image_url": _to_public_url(session_info.image_url),
         "status": session_info.status,
         "detections": detections
     }
