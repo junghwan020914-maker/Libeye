@@ -15,7 +15,8 @@ torch.load = _patched_load
 from ultralytics import YOLO
 from config import YOLO_CONFIDENCE
 
-_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# __file__ 은 service/ 안이므로 한 단계 위(ai_worker/)를 기준으로 경로 설정
+_BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 YOLO_MODEL_PATH = os.path.join(_BASE_DIR, "weights", "best.pt")
 
 try:

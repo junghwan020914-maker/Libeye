@@ -7,9 +7,9 @@ from sqlalchemy.orm import sessionmaker
 
 from config import CELERY_BROKER_URL, CELERY_RESULT_BACKEND, DATABASE_URL
 from storage import s3_client, ensure_buckets_exist, upload_image, download_image
-from detector import yolo_model, run_detection, crop_spine
-from ocr import extract_text_with_gemma
-from matcher import match_book_by_call_number
+from service.detector import yolo_model, run_detection, crop_spine
+from service.ocr import extract_text_with_gemma
+from service.matcher import match_book_by_call_number
 from misplacement import detect_misplacements
 from models import ScanSession, ScanResultDetail
 

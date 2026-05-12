@@ -22,4 +22,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # 6. Celery 워커 실행 명령 (프로젝트명 libeye 반영)
-CMD ["celery", "-A", "tasks", "worker", "--loglevel=info"]
+CMD ["celery", "-A", "pipeline", "worker", "--loglevel=info"]

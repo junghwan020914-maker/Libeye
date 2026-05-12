@@ -81,7 +81,7 @@ services:
     build: ./ai_worker
     container_name: libeye-ai-worker
      # -------- 👇 이 줄을 새로 추가해 주세요! --------
-    command: celery -A tasks worker --pool=solo --loglevel=info
+    command: celery -A pipeline worker --pool=solo --loglevel=info
     # ------------------------------------------------
     
     environment:
