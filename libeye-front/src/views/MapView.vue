@@ -149,15 +149,16 @@ const getStatusColor = (locId: string) => {
     </div>
 
     <div v-if="showLevelModal" class="absolute inset-0 bg-stone-900/60 z-40 flex flex-col justify-end p-0 backdrop-blur-sm transition-all duration-300" @click.self="showLevelModal = false">
-      <div class="bg-white w-full rounded-t-3xl p-6 shadow-2xl animate-slide-up">
-        <div class="flex justify-between items-center mb-5">
+      <div class="bg-white w-full rounded-t-3xl p-6 shadow-2xl animate-slide-up flex flex-col max-h-[70vh]">
+        
+        <div class="flex justify-between items-center mb-5 shrink-0">
           <h2 class="text-xl font-extrabold text-stone-900">{{ selectedShelfGroup?.section }}열 {{ selectedShelfGroup?.shelf_num }}번 책장</h2>
           <button @click="showLevelModal = false" class="w-8 h-8 bg-stone-100 rounded-full text-stone-600 font-bold">✕</button>
         </div>
         
-        <p class="text-xs text-stone-500 mb-3">작업할 단(층)을 선택해주세요.</p>
+        <p class="text-xs text-stone-500 mb-3 shrink-0">작업할 단(층)을 선택해주세요.</p>
         
-        <div class="grid grid-cols-2 gap-3 mb-4">
+        <div class="grid grid-cols-2 gap-3 mb-4 overflow-y-auto pb-4 custom-scrollbar">
           <button v-for="loc in selectedShelfGroup?.levels" :key="loc.location_id" 
                   @click="openStatusModal(loc)"
                   class="p-4 rounded-xl flex items-center justify-between font-bold text-sm shadow-sm transition-transform active:scale-95"
