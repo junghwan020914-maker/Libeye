@@ -8,6 +8,9 @@ import mapImage from "../assets/img-floor-central-f3.png";
 
 const router = useRouter();
 
+// 💡 1. 선택된 위치 정보를 잠시 담아둘 변수 추가
+const selectedLocationInfo = ref<any>(null);
+
 // 모달 상태 관리
 const showLevelModal = ref(false); // 단(Level) 선택 모달
 const showModal = ref(false);      // 최종 상태/스캔 모달
@@ -71,6 +74,9 @@ const openLevelModal = (group: any) => {
 // 특정 단(Level)을 클릭했을 때
 const openStatusModal = (loc: any) => {
   showLevelModal.value = false; // 단 선택 모달은 닫기
+
+  // 💡 2. 모달이 열릴 때 어떤 단(loc)을 클릭했는지 저장
+  selectedLocationInfo.value = loc;
   
   const statusObj = mapStatus.value[loc.location_id] || { status: 'pending', error_count: 0 };
   const status = statusObj.status;
@@ -91,8 +97,16 @@ const openStatusModal = (loc: any) => {
   showModal.value = true;
 };
 
+// 💡 3. 페이지 이동 시 query 파라미터 포함
 const goToCamera = () => {
-  router.push('/camera');
+  if (selectedLocationInfo.value) {
+    router.push({ 
+      path: '/camera', 
+      query: { locationId: selectedLocationInfo.value.location_id } 
+    });
+  } else {
+    router.push('/camera'); // 만약 예외 상황으로 위치가 없으면 그냥 이동
+  }
 };
 
 const getStatusColor = (locId: string) => {
