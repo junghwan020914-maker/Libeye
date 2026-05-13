@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router';
 import { getLocations, getMapStatus } from '../api/sessionAPI';
 
 // 💡 1. 사용할 지도 이미지 import (이미지를 src/assets 폴더로 이동시켜주세요)
-import mapImage from '@/assets/img-floor-central-f3.png';
+import mapImage from "../assets/img-floor-central-f3.png";
 
 const router = useRouter();
 
