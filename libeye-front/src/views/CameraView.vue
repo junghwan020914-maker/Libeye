@@ -257,18 +257,18 @@ const simulateCapture = async () => {
 };
 
 onMounted(async () => {
-  // 1. 화면 UI 및 이벤트 초기 설정 (기존 코드)
+  // 화면 UI 및 이벤트 초기 설정
   document.body.classList.add('camera-mode');
   enterFullScreen();
   
   const mq = window.matchMedia("(orientation: portrait)");
   mq.addEventListener("change", handleOrientationChange);
 
-  // 2. 위치 데이터 로드 및 URL 파라미터 확인 (합친 코드)
   try {
-    locations.value = await getLocations(); // 💡 한 번만 호출
+    // 1. 위치 데이터 로드
+    locations.value = await getLocations();
     
-    // 지도 뷰에서 넘어온 locationId가 있는지 확인
+    // 2. 지도 뷰에서 넘어온 locationId 파라미터 확인
     const queryLocationId = route.query.locationId;
     
     if (queryLocationId) {
@@ -276,23 +276,17 @@ onMounted(async () => {
       const matchedLoc = locations.value.find((loc: any) => loc.location_id === queryLocationId);
       
       if (matchedLoc) {
+        // 위치 자동 선택
         selectedLocation.value = matchedLoc.location_id; 
         
-        // 위치 선택 단계를 건너뛰고 바로 촬영 단계로 변경
-        // (주의: 팀 코드의 변수명이 step인지, currentStep인지 꼭 확인하세요!)
-        step.value = 2; 
+        // 💡 3. 위치 선택 모달을 숨겨서 바로 카메라 화면으로 진입!
+        showLocationModal.value = false; 
       }
     }
   } catch (err) {
     console.error("Failed to load locations", err);
   }
 });
-
-const selectLocation = (locId: string) => {
-  selectedLocation.value = locId;
-  showLocationModal.value = false;
-  startCamera();
-};
 
 onBeforeUnmount(() => {
   // 카메라 떠날 때 camera-mode 제거 → 원래 레이아웃 복원
