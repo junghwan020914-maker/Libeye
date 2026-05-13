@@ -1,34 +1,48 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import Chart from 'chart.js/auto';
+import { getAnalytics } from '../api/sessionAPI';
 
 const weeklyCanvas = ref<HTMLCanvasElement | null>(null);
 const typeCanvas = ref<HTMLCanvasElement | null>(null);
 const aiCanvas = ref<HTMLCanvasElement | null>(null);
+const aiSuccessRate = ref(0);
 
-onMounted(() => {
-  if (weeklyCanvas.value) {
-    new Chart(weeklyCanvas.value, {
-      type: 'bar',
-      data: { labels: ['월','화','수','목','금','토'], datasets: [{ data: [120,150,180,140,210,80], backgroundColor: '#292524', borderRadius: 4 }] },
-      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: {display:false} }, scales: { y: {display: false}, x: {grid: {display: false}, border: {display:false}} } }
-    });
-  }
+onMounted(async () => {
+  try {
+    const data = await getAnalytics();
+    
+    if (weeklyCanvas.value) {
+      new Chart(weeklyCanvas.value, {
+        type: 'bar',
+        data: { labels: ['월','화','수','목','금','토'], datasets: [{ data: data.weekly_scans, backgroundColor: '#292524', borderRadius: 4 }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: {display:false} }, scales: { y: {display: false}, x: {grid: {display: false}, border: {display:false}} } }
+      });
+    }
 
-  if (typeCanvas.value) {
-    new Chart(typeCanvas.value, {
-      type: 'doughnut',
-      data: { labels: ['오배열','누락','인식실패'], datasets: [{ data: [65,20,15], backgroundColor: ['#D32F2F','#1976D2','#F57C00'], borderWidth: 0, cutout: '60%' }] },
-      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: {position: 'bottom', labels: {boxWidth: 8, font:{size: 9}}} } }
-    });
-  }
+    if (typeCanvas.value) {
+      const errorData = [
+        data.error_ratios.MISPLACED || 0,
+        data.error_ratios.MISSING || 0,
+        (data.error_ratios.UNKNOWN || 0) + (data.error_ratios.EXTRA || 0)
+      ];
+      new Chart(typeCanvas.value, {
+        type: 'doughnut',
+        data: { labels: ['오배열','누락','기타오류'], datasets: [{ data: errorData, backgroundColor: ['#D32F2F','#1976D2','#F57C00'], borderWidth: 0, cutout: '60%' }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: {position: 'bottom', labels: {boxWidth: 8, font:{size: 9}}} } }
+      });
+    }
 
-  if (aiCanvas.value) {
-    new Chart(aiCanvas.value, {
-      type: 'doughnut',
-      data: { labels: ['성공','수동'], datasets: [{ data: [92,8], backgroundColor: ['#2E7D32','#e7e5e4'], borderWidth: 0, cutout: '75%', circumference: 180, rotation: 270 }] },
-      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: {display:false}, tooltip: {enabled:false} } }
-    });
+    if (aiCanvas.value) {
+      aiSuccessRate.value = data.ai_success_rate;
+      new Chart(aiCanvas.value, {
+        type: 'doughnut',
+        data: { labels: ['성공','수동'], datasets: [{ data: [data.ai_success_rate, 100 - data.ai_success_rate], backgroundColor: ['#2E7D32','#e7e5e4'], borderWidth: 0, cutout: '75%', circumference: 180, rotation: 270 }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: {display:false}, tooltip: {enabled:false} } }
+      });
+    }
+  } catch(e) {
+    console.error(e);
   }
 });
 </script>
@@ -60,7 +74,7 @@ onMounted(() => {
           <div class="relative w-full h-[140px] max-h-[200px] mx-auto mt-4">
             <canvas ref="aiCanvas"></canvas>
             <div class="absolute top-1/2 left-1/2 -translate-x-1/2 mt-1">
-              <span class="text-xl font-extrabold">92%</span>
+              <span class="text-xl font-extrabold">{{ aiSuccessRate }}%</span>
             </div>
           </div>
         </div>

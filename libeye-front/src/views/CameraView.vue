@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, computed } from 'vue';
 import { useRouter } from 'vue-router';
-import { startSession } from '../api/sessionAPI';
+import { startSession, getLocations } from '../api/sessionAPI';
 
 const router = useRouter();
 const videoRef = ref<HTMLVideoElement | null>(null);
@@ -11,6 +11,11 @@ const isCameraReady = ref(false);
 const isCameraError = ref(false);
 const isUploading = ref(false);
 const currentStream = ref<MediaStream | null>(null);
+
+// Location State
+const locations = ref<any[]>([]);
+const selectedLocation = ref<string | null>(null);
+const showLocationModal = ref(true);
 
 // Crop & Upload State
 const isCropping = ref(false);
@@ -53,6 +58,7 @@ const exitFullScreen = () => {
 };
 
 const startCamera = async () => {
+  if (!selectedLocation.value) return; // 구역이 선택되어야만 카메라 시작
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
     currentStream.value = stream;
@@ -100,7 +106,7 @@ const takePhoto = async () => {
     const base64Image = getPureBase64(dataUrl);
     if (!base64Image) throw new Error("Base64 string is empty");
     
-    const response = await startSession('LOC-A-1-3', base64Image);
+    const response = await startSession(selectedLocation.value || 'UNKNOWN', base64Image);
     const sessionId = response.session_id;
     
     router.push({ name: 'detail', query: { sessionId } });
@@ -227,7 +233,7 @@ const applyCropAndUpload = async () => {
     const base64Image = getPureBase64(croppedDataUrl);
     if (!base64Image) throw new Error("Invalid base64 payload");
     
-    const response = await startSession('LOC-A-1-3', base64Image);
+    const response = await startSession(selectedLocation.value || 'UNKNOWN', base64Image);
     router.push({ name: 'detail', query: { sessionId: response.session_id } });
   } catch (err) {
     console.error('Upload error:', err);
@@ -240,7 +246,7 @@ const simulateCapture = async () => {
   isUploading.value = true;
   try {
     const dummyBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=";
-    const response = await startSession('LOC-A-1-3', dummyBase64);
+    const response = await startSession(selectedLocation.value || 'UNKNOWN', dummyBase64);
     router.push({ name: 'detail', query: { sessionId: response.session_id } });
   } catch (err) {
     console.error('Upload error:', err);
@@ -249,14 +255,26 @@ const simulateCapture = async () => {
   }
 };
 
-onMounted(() => {
+onMounted(async () => {
   // body에 camera-mode 추가 → #app max-width 제약 해제 (가로모드 전체 너비 대응)
   document.body.classList.add('camera-mode');
   enterFullScreen();
-  startCamera();
+  
+  try {
+    locations.value = await getLocations();
+  } catch (err) {
+    console.error("Failed to load locations", err);
+  }
+  
   const mq = window.matchMedia("(orientation: portrait)");
   mq.addEventListener("change", handleOrientationChange);
 });
+
+const selectLocation = (locId: string) => {
+  selectedLocation.value = locId;
+  showLocationModal.value = false;
+  startCamera();
+};
 
 onBeforeUnmount(() => {
   // 카메라 떠날 때 camera-mode 제거 → 원래 레이아웃 복원
@@ -271,16 +289,40 @@ onBeforeUnmount(() => {
 <template>
   <main class="flex-col h-full bg-black relative z-30 flex animate-fade-in">
     <!-- 가로 모드 유도 오버레이 -->
-    <div v-if="isPortrait && !isCropping" class="absolute inset-0 z-50 bg-black/90 flex flex-col items-center justify-center p-6 text-center backdrop-blur-md">
+    <div v-if="isPortrait && !isCropping && !showLocationModal" class="absolute inset-0 z-50 bg-black/90 flex flex-col items-center justify-center p-6 text-center backdrop-blur-md">
       <div class="text-6xl mb-6 animate-pulse">📱🔄</div>
       <h2 class="text-white text-2xl font-bold mb-4">가로 모드로 전환해주세요</h2>
       <p class="text-stone-300 text-sm">정확한 서가 인식을 위해<br>기기를 가로로 눕혀서 촬영해야 합니다.</p>
     </div>
 
+    <!-- 구역 선택 모달 -->
+    <div v-if="showLocationModal" class="absolute inset-0 z-[60] bg-stone-900 flex flex-col p-6 animate-fade-in">
+      <div class="flex justify-between items-center mb-6">
+        <button @click="router.push('/')" class="text-white text-2xl">◀</button>
+        <h2 class="text-white text-xl font-bold">스캔 구역 선택</h2>
+        <div class="w-6"></div>
+      </div>
+      <p class="text-stone-400 text-sm mb-4">점검을 진행할 구역을 선택해주세요.</p>
+      <div class="flex-1 overflow-y-auto flex flex-col gap-3">
+        <button 
+          v-for="loc in locations" 
+          :key="loc.location_id"
+          @click="selectLocation(loc.location_id)"
+          class="bg-stone-800 border border-stone-700 p-4 rounded-xl text-left active:bg-stone-700 transition-colors"
+        >
+          <div class="text-white font-bold">{{ loc.room_name }} - {{ loc.section }}열</div>
+          <div class="text-stone-400 text-xs mt-1">{{ loc.shelf_num }}번 서가 {{ loc.level_num }}단 (ID: {{ loc.location_id }})</div>
+        </button>
+        <div v-if="locations.length === 0" class="text-stone-500 text-center py-10">
+          구역 정보를 불러오는 중이거나 등록된 구역이 없습니다.
+        </div>
+      </div>
+    </div>
+
     <div class="absolute top-0 w-full z-20 p-4 flex justify-between items-center bg-gradient-to-b from-black/60 to-transparent pb-10 text-white">
       <button @click="router.push('/')" class="text-2xl px-2">◀</button>
-      <div class="text-center">
-        <h1 class="text-sm font-bold">인문과학실 A열 1번 서가 3단</h1>
+      <div class="text-center" v-if="selectedLocation">
+        <h1 class="text-sm font-bold">{{ selectedLocation }}</h1>
         <p v-if="!isCropping" class="text-[10px] text-white/70">가이드라인에 맞춰 서가를 촬영해주세요</p>
         <p v-else class="text-[10px] text-white/70">드래그하여 서가 영역을 선택하세요</p>
       </div>

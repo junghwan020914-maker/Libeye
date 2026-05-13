@@ -14,3 +14,23 @@ export const getSessionResults = async (sessionId: string) => {
   const response = await api.get(`/v1/sessions/${sessionId}/results`);
   return response.data;
 };
+
+export const getLocations = async () => {
+  const response = await api.get('/v1/locations');
+  return response.data;
+};
+
+export const getHistory = async () => {
+  const response = await api.get('/v1/sessions/history');
+  return response.data;
+};
+
+export const getMapStatus = async () => {
+  const response = await api.get('/v1/map/status');
+  return response.data;
+};
+
+export const getAnalytics = async () => {
+  const response = await api.get('/v1/analytics/dashboard');
+  return response.data;
+};

@@ -1,17 +1,32 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
+import { getLocations, getMapStatus } from '../api/sessionAPI';
 
 const router = useRouter();
 const showModal = ref(false);
 const modalData = ref({ title: '', status: '', content: '' });
+const locations = ref<any[]>([]);
+const mapStatus = ref<any>({});
 
-const showShelfModal = (id: string, status: string) => {
-  modalData.value.title = `${id} 서가`;
+onMounted(async () => {
+  try {
+    locations.value = await getLocations();
+    mapStatus.value = await getMapStatus();
+  } catch (e) {
+    console.error(e);
+  }
+});
+
+const showShelfModal = (loc: any) => {
+  const statusObj = mapStatus.value[loc.location_id] || { status: 'pending', error_count: 0 };
+  const status = statusObj.status;
+  
+  modalData.value.title = `${loc.room_name} ${loc.section}열 ${loc.shelf_num}번`;
   modalData.value.status = status;
   
   if (status === 'error') {
-    modalData.value.content = `<div class="font-bold text-red-800 mb-1">⚠ 조치 필요</div><ul class="text-red-700"><li>• 오배열 1건</li><li>• 누락 1건</li></ul>`;
+    modalData.value.content = `<div class="font-bold text-red-800 mb-1">⚠ 조치 필요</div><ul class="text-red-700"><li>• 오류 ${statusObj.error_count}건</li></ul>`;
   } else if (status === 'done') {
     modalData.value.content = `<div class="font-bold text-green-800">✅ 점검 완료</div>`;
   } else {
@@ -24,13 +39,19 @@ const showShelfModal = (id: string, status: string) => {
 const goToCamera = () => {
   router.push('/camera');
 };
+
+const getStatusColor = (locId: string) => {
+  const s = mapStatus.value[locId]?.status;
+  if (s === 'done') return 'bg-[#2E7D32] text-white';
+  if (s === 'error') return 'bg-[#D32F2F] text-white ring-2 ring-red-500/20';
+  return 'bg-stone-200 border border-stone-300 text-stone-500';
+};
 </script>
 
 <template>
   <main class="flex-col h-full animate-fade-in pb-20 bg-stone-100 overflow-y-auto flex">
     <header class="bg-white px-5 py-4 border-b border-stone-200 sticky top-0 z-20 shrink-0">
       <h1 class="text-xl font-extrabold text-stone-900">서고 작업 지도</h1>
-      <p class="text-xs font-medium text-stone-500">인문과학실 3층 A~D열</p>
     </header>
     <div class="bg-white px-5 py-2 border-b border-stone-100 flex gap-3 text-[9px] font-bold text-stone-600 shrink-0">
       <div class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded bg-stone-200 border border-stone-300"></span> 미점검</div>
@@ -39,18 +60,14 @@ const goToCamera = () => {
     </div>
 
     <div class="flex-1 overflow-y-auto p-6 relative">
-      <div class="absolute left-6 right-6 top-1/2 h-10 bg-stone-200/50 rounded flex items-center justify-center text-stone-400 font-bold tracking-widest text-xs pointer-events-none">중앙 통로</div>
-      
-      <div class="grid grid-cols-4 gap-x-3 gap-y-5 mb-20 relative z-10">
-        <div @click="showShelfModal('A-1', 'done')" class="h-16 bg-[#2E7D32] rounded flex items-center justify-center text-white font-bold text-xs cursor-pointer active:scale-95 transition-transform">A-1</div>
-        <div @click="showShelfModal('A-2', 'error')" class="h-16 bg-[#D32F2F] rounded flex items-center justify-center text-white font-bold text-xs ring-2 ring-red-500/20 cursor-pointer active:scale-95 transition-transform">A-2</div>
-        <div @click="showShelfModal('A-3', 'done')" class="h-16 bg-[#2E7D32] rounded flex items-center justify-center text-white font-bold text-xs cursor-pointer active:scale-95 transition-transform">A-3</div>
-        <div @click="showShelfModal('A-4', 'pending')" class="h-16 bg-stone-200 border border-stone-300 rounded flex items-center justify-center text-stone-500 font-bold text-xs cursor-pointer active:scale-95 transition-transform">A-4</div>
-        
-        <div class="h-16 bg-stone-200 border border-stone-300 rounded flex items-center justify-center text-stone-500 font-bold text-xs">B-1</div>
-        <div class="h-16 bg-stone-200 border border-stone-300 rounded flex items-center justify-center text-stone-500 font-bold text-xs">B-2</div>
-        <div class="h-16 bg-[#D32F2F] rounded flex items-center justify-center text-white font-bold text-xs cursor-pointer active:scale-95 transition-transform">B-3</div>
-        <div class="h-16 bg-stone-200 border border-stone-300 rounded flex items-center justify-center text-stone-500 font-bold text-xs">B-4</div>
+      <div class="grid grid-cols-3 gap-x-3 gap-y-5 mb-20 relative z-10">
+        <div v-for="loc in locations" :key="loc.location_id" 
+             @click="showShelfModal(loc)" 
+             class="h-16 rounded flex flex-col items-center justify-center font-bold text-xs cursor-pointer active:scale-95 transition-transform"
+             :class="getStatusColor(loc.location_id)">
+          <span>{{ loc.section }}-{{ loc.shelf_num }}</span>
+          <span class="text-[9px] font-normal opacity-80">{{ loc.level_num }}단</span>
+        </div>
       </div>
     </div>
 
