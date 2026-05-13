@@ -38,13 +38,17 @@ onMounted(async () => {
 });
 
 // 💡 3. locations 데이터를 '책장(section-shelf_num)' 기준으로 묶어주기 (그룹화)
+// 💡 locations 데이터를 묶어줄 때 '열' 글자를 제거합니다.
 const groupedLocations = computed(() => {
   const groups: Record<string, { section: string; shelf_num: number; levels: any[] }> = {};
   
   locations.value.forEach(loc => {
-    const key = `${loc.section}-${loc.shelf_num}`;
+    // 'B열' -> 'B' 로 문자열을 정리합니다.
+    const cleanSection = loc.section.replace('열', '').trim();
+    const key = `${cleanSection}-${loc.shelf_num}`;
+    
     if (!groups[key]) {
-      groups[key] = { section: loc.section, shelf_num: loc.shelf_num, levels: [] };
+      groups[key] = { section: cleanSection, shelf_num: loc.shelf_num, levels: [] };
     }
     groups[key].levels.push(loc);
   });
@@ -64,13 +68,16 @@ const openLevelModal = (group: any) => {
 };
 
 // 특정 단(Level)을 클릭했을 때 기존 상태 모달 표시
+// 특정 단(Level)을 클릭했을 때
 const openStatusModal = (loc: any) => {
   showLevelModal.value = false; // 단 선택 모달은 닫기
   
   const statusObj = mapStatus.value[loc.location_id] || { status: 'pending', error_count: 0 };
   const status = statusObj.status;
   
-  modalData.value.title = `${loc.room_name} ${loc.section}열 ${loc.shelf_num}번 - ${loc.level_num}단`;
+  // 💡 여기서도 원본 데이터(loc.section)에서 '열'을 제거하고 조립합니다.
+  const cleanSection = loc.section.replace('열', '').trim();
+  modalData.value.title = `${loc.room_name} ${cleanSection}열 ${loc.shelf_num}번 - ${loc.level_num}단`;
   modalData.value.status = status;
   
   if (status === 'error') {
