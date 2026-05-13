@@ -9,6 +9,7 @@ Extract the 'call_number' (e.g., 813.6 김12가) and the 'title'.
 Respond strictly in JSON format like this:
 {"call_number": "extracted text", "title": "extracted text"}
 If you cannot read it, return empty strings.
+DO NOT include any extra notes, descriptions, or comments about text orientation (e.g., 'Note: Title is vertical'). Just output the exact text you see.
 """
 
 

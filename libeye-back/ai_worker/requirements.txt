@@ -8,3 +8,5 @@ opencv-python-headless
 numpy
 requests
 boto3
+thefuzz[speedup]
+jamo

@@ -9,9 +9,9 @@ from config import CELERY_BROKER_URL, CELERY_RESULT_BACKEND, DATABASE_URL
 from storage import s3_client, ensure_buckets_exist, upload_image, download_image
 from service.detector import yolo_model, run_detection, crop_spine
 from service.ocr import extract_text_with_gemma
-from service.matcher import match_book_by_call_number
+from service.matcher import hybrid_book_matching_with_jamo
 from service.misplacement import detect_misplacements
-from models import ScanSession, ScanResultDetail
+from models import ScanSession, ScanResultDetail, BookMaster
 
 # --- 앱 초기화 ---
 celery_app = Celery("tasks", broker=CELERY_BROKER_URL, backend=CELERY_RESULT_BACKEND)
@@ -56,6 +56,12 @@ def process_scan_session(session_id: str, original_file_name: str):
         else:
             print(f"[{session_id}] {len(boxes)}권 탐지")
 
+            db_candidates = (
+                db.query(BookMaster)
+                .filter(BookMaster.assigned_loc_id == session.location_id)
+                .all()
+            )
+
             for idx, box in enumerate(boxes):
                 x1, y1, x2, y2 = map(int, box.xyxy[0])
 
@@ -70,9 +76,10 @@ def process_scan_session(session_id: str, original_file_name: str):
                 print(f"[{session_id}] OCR 요청 중 (crop {idx})")
                 ocr_result = extract_text_with_gemma(b64)
 
-                # 5. DB 퍼지 매칭
+                # 5. DB 하이브리드 퍼지 매칭 (청구기호 + 자소분리 제목)
                 raw_call_number = ocr_result.get("call_number", "")
-                matched = match_book_by_call_number(db, raw_call_number, session.location_id)
+                raw_title = ocr_result.get("title", "")
+                matched = hybrid_book_matching_with_jamo(raw_call_number, raw_title, db_candidates)
 
                 scanned_results.append({
                     "bounding_box": {"x": x1, "y": y1, "w": x2 - x1, "h": y2 - y1},
