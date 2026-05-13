@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, computed } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router'; // 💡 useRoute 추가
 import { startSession, getLocations } from '../api/sessionAPI';
 
 const router = useRouter();
+const route = useRoute(); // 💡 라우트 객체 생성 추가
 const videoRef = ref<HTMLVideoElement | null>(null);
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 const previewUrl = ref<string | null>(null);
@@ -256,18 +257,35 @@ const simulateCapture = async () => {
 };
 
 onMounted(async () => {
-  // body에 camera-mode 추가 → #app max-width 제약 해제 (가로모드 전체 너비 대응)
+  // 1. 화면 UI 및 이벤트 초기 설정 (기존 코드)
   document.body.classList.add('camera-mode');
   enterFullScreen();
   
+  const mq = window.matchMedia("(orientation: portrait)");
+  mq.addEventListener("change", handleOrientationChange);
+
+  // 2. 위치 데이터 로드 및 URL 파라미터 확인 (합친 코드)
   try {
-    locations.value = await getLocations();
+    locations.value = await getLocations(); // 💡 한 번만 호출
+    
+    // 지도 뷰에서 넘어온 locationId가 있는지 확인
+    const queryLocationId = route.query.locationId;
+    
+    if (queryLocationId) {
+      // 불러온 목록 중에 해당 ID가 있는지 확인
+      const matchedLoc = locations.value.find((loc: any) => loc.location_id === queryLocationId);
+      
+      if (matchedLoc) {
+        selectedLocation.value = matchedLoc.location_id; 
+        
+        // 위치 선택 단계를 건너뛰고 바로 촬영 단계로 변경
+        // (주의: 팀 코드의 변수명이 step인지, currentStep인지 꼭 확인하세요!)
+        step.value = 2; 
+      }
+    }
   } catch (err) {
     console.error("Failed to load locations", err);
   }
-  
-  const mq = window.matchMedia("(orientation: portrait)");
-  mq.addEventListener("change", handleOrientationChange);
 });
 
 const selectLocation = (locId: string) => {
