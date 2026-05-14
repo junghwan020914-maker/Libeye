@@ -34,10 +34,8 @@ const groupedLocations = computed(() => {
   const groups: Record<string, { section: string; shelf_num: number; levels: any[] }> = {};
   
   locations.value.forEach(loc => {
-    // (이전에 추가했던 1~6행 강제 삭제 로직 원상복구/제거)
-
     const cleanSection = loc.section.replace('열', '').trim();
-    const key = `${cleanSection}-${loc.shelf_num}`; // 예: A-1, B-7
+    const key = `${cleanSection}-${loc.shelf_num}`; 
     
     if (!groups[key]) {
       groups[key] = { section: cleanSection, shelf_num: loc.shelf_num, levels: [] };
@@ -53,34 +51,31 @@ const groupedLocations = computed(() => {
   return groups;
 });
 
-// 💡 3. '새로운 엑셀 파일' 기반 3층 그리드 레이아웃 생성 로직
+// 💡 3. 새로운 엑셀 파일 기반 3층 그리드 레이아웃 생성 로직
 const grid3F = computed(() => {
   const grid = [];
   const sections = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
   
-  // 1행부터 32행까지 정상적으로 순회합니다.
   for (let r = 1; r <= 32; r++) {
     const row = [];
     for (let c = 0; c < 7; c++) {
       let hasShelf = false;
       
-      // 💡 새롭게 첨부해주신 엑셀 'O' 마킹 규칙 완벽 적용
-      if (c === 0) hasShelf = true; // A열 (1~32행 전체)
-      if (c === 1) hasShelf = true; // B열 (1~32행 전체)
-      if (c === 2 && r >= 5) hasShelf = true;  // C열 (5행부터 시작)
-      if (c === 3 && r >= 13) hasShelf = true; // D열 (13행부터 시작)
-      if (c === 4 && r >= 19) hasShelf = true; // E열 (19행부터 시작)
-      if (c === 5 && r >= 25) hasShelf = true; // F열 (25행부터 시작)
-      if (c === 6 && r >= 25) hasShelf = true; // G열 (25행부터 시작)
+      if (c === 0) hasShelf = true; // A열 (1~32행)
+      if (c === 1) hasShelf = true; // B열 (1~32행)
+      if (c === 2 && r >= 5) hasShelf = true;  // C열 (5~32행)
+      if (c === 3 && r >= 13) hasShelf = true; // D열 (13~32행)
+      if (c === 4 && r >= 19) hasShelf = true; // E열 (19~32행)
+      if (c === 5 && r >= 25) hasShelf = true; // F열 (25~32행)
+      if (c === 6 && r >= 25) hasShelf = true; // G열 (25~32행)
       
       if (hasShelf) {
         const section = sections[c];
         const key = `${section}-${r}`;
-        // API 데이터 매핑 (없으면 빈 껍데기만 렌더링)
         const groupData = groupedLocations.value[key] || { section, shelf_num: r, levels: [] };
         row.push(groupData);
       } else {
-        row.push(null); // 책장이 없는 복도/여백 공간
+        row.push(null); 
       }
     }
     grid.push(row);
@@ -88,15 +83,13 @@ const grid3F = computed(() => {
   return grid;
 });
 
-// 층별 맵핑 분기 (추후 B2~2F 데이터 추가 가능)
 const currentGrid = computed(() => {
   if (currentFloor.value === '3F') return grid3F.value;
-  return []; // 다른 층은 데이터가 없으면 비워둠 (추후 확장)
+  return []; 
 });
 
-// 💡 4. 전체 책장(Group)의 상태 색상 계산
 const getShelfGroupColor = (group: any) => {
-  if (!group || group.levels.length === 0) return 'bg-white border-dashed border-2 border-stone-300 text-stone-400'; // 데이터 없음
+  if (!group || group.levels.length === 0) return 'bg-white border-dashed border-2 border-stone-300 text-stone-400';
   
   let hasError = false;
   let allDone = true;
@@ -109,10 +102,9 @@ const getShelfGroupColor = (group: any) => {
 
   if (hasError) return 'bg-[#D32F2F] text-white border-transparent shadow-md ring-2 ring-red-500/30';
   if (allDone) return 'bg-[#2E7D32] text-white border-transparent shadow-md';
-  return 'bg-stone-200 border-stone-300 text-stone-700 shadow-sm'; // 미점검(Pending) 혼재
+  return 'bg-stone-200 border-stone-300 text-stone-700 shadow-sm';
 };
 
-// 특정 단(Level)의 상태 색상 계산
 const getLevelColor = (locId: string) => {
   const s = mapStatus.value[locId]?.status;
   if (s === 'done') return 'bg-[#2E7D32] text-white';
@@ -120,7 +112,6 @@ const getLevelColor = (locId: string) => {
   return 'bg-stone-200 border border-stone-300 text-stone-500';
 };
 
-// 칸(책장 전체) 클릭 시 단 선택 모달 오픈
 const openLevelModal = (group: any) => {
   if (!group || group.levels.length === 0) {
     alert("해당 구역의 도서 데이터가 DB에 없습니다.");
@@ -130,7 +121,6 @@ const openLevelModal = (group: any) => {
   showLevelModal.value = true;
 };
 
-// 특정 단(Level) 클릭 시 상세 상태 모달 오픈
 const openStatusModal = (loc: any) => {
   showLevelModal.value = false;
   selectedLocationInfo.value = loc;
@@ -153,11 +143,20 @@ const openStatusModal = (loc: any) => {
   showModal.value = true;
 };
 
+// 💡 4. 라우팅 로직 (스캔 & 기록 보기)
 const goToCamera = () => {
   if (selectedLocationInfo.value) {
     router.push({ path: '/camera', query: { locationId: selectedLocationInfo.value.location_id } });
   } else {
     router.push('/camera');
+  }
+};
+
+const goToHistory = () => {
+  if (selectedLocationInfo.value) {
+    router.push({ path: '/history', query: { locationId: selectedLocationInfo.value.location_id } });
+  } else {
+    router.push('/history');
   }
 };
 </script>
@@ -218,7 +217,7 @@ const goToCamera = () => {
       </div>
     </div>
 
-    <div v-if="showLevelModal" class="fixed inset-0 bg-stone-900/60 z-[60] flex flex-col justify-end p-0 backdrop-blur-sm transition-all duration-300" @click.self="showLevelModal = false">
+    <div v-if="showLevelModal" class="absolute inset-0 bg-stone-900/60 z-40 flex flex-col justify-end p-0 backdrop-blur-sm transition-all duration-300" @click.self="showLevelModal = false">
       <div class="bg-white w-full rounded-t-3xl p-6 shadow-2xl animate-slide-up flex flex-col max-h-[65vh] mb-20">
         
         <div class="flex justify-between items-center mb-5 shrink-0">
@@ -241,7 +240,7 @@ const goToCamera = () => {
       </div>
     </div>
 
-    <div v-if="showModal" class="fixed inset-0 bg-stone-900/60 z-[70] flex items-center justify-center p-6 pb-24 backdrop-blur-sm">
+    <div v-if="showModal" class="absolute inset-0 bg-stone-900/60 z-50 flex items-center justify-center p-6 backdrop-blur-sm">
       <div class="bg-white w-full max-w-sm rounded-2xl p-5 shadow-2xl animate-pop-in">
         <div class="flex justify-between items-start mb-3">
           <div>
@@ -256,7 +255,16 @@ const goToCamera = () => {
                'bg-stone-100 border border-stone-200': modalData.status === 'pending'
              }"
              v-html="modalData.content"></div>
-        <button @click="goToCamera" class="w-full bg-stone-800 text-white text-sm font-bold py-3.5 rounded-xl transition-colors hover:bg-stone-700">이 구역 스캔하기</button>
+        <div class="flex gap-3">
+          <button @click="goToHistory" 
+                  class="flex-1 bg-white border border-stone-300 text-stone-700 text-sm font-bold py-3.5 rounded-xl transition-colors hover:bg-stone-50 shadow-sm">
+            최근 기록 보기
+          </button>
+          <button @click="goToCamera" 
+                  class="flex-1 bg-stone-800 text-white text-sm font-bold py-3.5 rounded-xl transition-colors hover:bg-stone-700 shadow-sm">
+            스캔하기
+          </button>
+        </div>
       </div>
     </div>
   </main>
@@ -269,17 +277,6 @@ const goToCamera = () => {
 .hide-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
-}
-/* 모달창 내부 스크롤바 커스텀 */
-.custom-scrollbar::-webkit-scrollbar {
-  width: 6px;
-}
-.custom-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
-}
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background-color: #d6d3d1; /* stone-300 */
-  border-radius: 10px;
 }
 .animate-slide-up {
   animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
@@ -294,5 +291,15 @@ const goToCamera = () => {
 @keyframes popIn {
   0% { opacity: 0; transform: scale(0.95); }
   100% { opacity: 1; transform: scale(1); }
+}
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: #d6d3d1;
+  border-radius: 10px;
 }
 </style>
