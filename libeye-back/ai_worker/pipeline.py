@@ -9,7 +9,7 @@ from config import CELERY_BROKER_URL, CELERY_RESULT_BACKEND, DATABASE_URL
 from storage import s3_client, ensure_buckets_exist, upload_image, download_image
 from service.detector import yolo_model, run_detection, crop_spine
 from service.ocr import extract_text_with_gemma
-from service.matcher import hybrid_book_matching_with_jamo
+from service.matcher import hybrid_book_matching_with_jamo, get_top_candidates
 from service.misplacement import detect_misplacements
 from models import ScanSession, ScanResultDetail, BookMaster
 
@@ -56,11 +56,7 @@ def process_scan_session(session_id: str, original_file_name: str):
         else:
             print(f"[{session_id}] {len(boxes)}권 탐지")
 
-            db_candidates = (
-                db.query(BookMaster)
-                .filter(BookMaster.assigned_loc_id == session.location_id)
-                .all()
-            )
+            # [삭제됨] 기존의 위치 기반 일괄 DB 후보 조회 로직 제거
 
             for idx, box in enumerate(boxes):
                 x1, y1, x2, y2 = map(int, box.xyxy[0])
@@ -76,10 +72,19 @@ def process_scan_session(session_id: str, original_file_name: str):
                 print(f"[{session_id}] OCR 요청 중 (crop {idx})")
                 ocr_result = extract_text_with_gemma(b64)
 
-                # 5. DB 하이브리드 퍼지 매칭 (청구기호 + 자소분리 제목)
+                # 5. DB 하이브리드 퍼지 매칭 (전체 DB 대상 Top 5 검색 + 자소분리 정밀 매칭)
                 raw_call_number = ocr_result.get("call_number", "")
                 raw_title = ocr_result.get("title", "")
-                matched = hybrid_book_matching_with_jamo(raw_call_number, raw_title, db_candidates)
+                
+                matched = None
+                if raw_call_number.strip():
+                    print(f"[{session_id}] 1차 전역 DB 검색 (청구기호: {raw_call_number})")
+                    top_candidates = get_top_candidates(db, raw_call_number, limit=5)
+                    
+                    print(f"[{session_id}] 2차 하이브리드 정밀 매칭 (후보 {len(top_candidates)}건)")
+                    matched = hybrid_book_matching_with_jamo(raw_call_number, raw_title, top_candidates)
+                else:
+                    print(f"[{session_id}] 청구기호 OCR 실패로 매칭 생략")
 
                 scanned_results.append({
                     "bounding_box": {"x": x1, "y": y1, "w": x2 - x1, "h": y2 - y1},
