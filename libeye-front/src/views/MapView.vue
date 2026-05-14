@@ -34,6 +34,8 @@ const groupedLocations = computed(() => {
   const groups: Record<string, { section: string; shelf_num: number; levels: any[] }> = {};
   
   locations.value.forEach(loc => {
+    // (이전에 추가했던 1~6행 강제 삭제 로직 원상복구/제거)
+
     const cleanSection = loc.section.replace('열', '').trim();
     const key = `${cleanSection}-${loc.shelf_num}`; // 예: A-1, B-7
     
@@ -51,23 +53,25 @@ const groupedLocations = computed(() => {
   return groups;
 });
 
-// 💡 3. 엑셀 기반 3층 그리드 레이아웃 생성 로직 (32행 x 7열)
+// 💡 3. '새로운 엑셀 파일' 기반 3층 그리드 레이아웃 생성 로직
 const grid3F = computed(() => {
   const grid = [];
   const sections = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
   
+  // 1행부터 32행까지 정상적으로 순회합니다.
   for (let r = 1; r <= 32; r++) {
     const row = [];
     for (let c = 0; c < 7; c++) {
       let hasShelf = false;
-      // 엑셀 'O' 마킹 규칙 적용
-      if (c === 0) hasShelf = true; // A열 (1~32행)
-      if (c === 1 && r >= 7) hasShelf = true; // B열 (7~32행)
-      if (c === 2 && r >= 11) hasShelf = true; // C열 (11~32행)
-      if (c === 3 && r >= 19) hasShelf = true; // D열 (19~32행)
-      if (c === 4 && r >= 25) hasShelf = true; // E열 (25~32행)
-      if (c === 5 && r >= 31) hasShelf = true; // F열 (31~32행)
-      if (c === 6 && r >= 31) hasShelf = true; // G열 (31~32행)
+      
+      // 💡 새롭게 첨부해주신 엑셀 'O' 마킹 규칙 완벽 적용
+      if (c === 0) hasShelf = true; // A열 (1~32행 전체)
+      if (c === 1) hasShelf = true; // B열 (1~32행 전체)
+      if (c === 2 && r >= 5) hasShelf = true;  // C열 (5행부터 시작)
+      if (c === 3 && r >= 13) hasShelf = true; // D열 (13행부터 시작)
+      if (c === 4 && r >= 19) hasShelf = true; // E열 (19행부터 시작)
+      if (c === 5 && r >= 25) hasShelf = true; // F열 (25행부터 시작)
+      if (c === 6 && r >= 25) hasShelf = true; // G열 (25행부터 시작)
       
       if (hasShelf) {
         const section = sections[c];
