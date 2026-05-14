@@ -1,13 +1,31 @@
-from typing import Iterable, Optional
+from typing import Iterable, Optional, List
 
 from thefuzz import fuzz
 from jamo import h2j, j2hcj
+from sqlalchemy.orm import Session
 
 from models import BookMaster
 
 WEIGHT_CALL_NUM = 0.8
 WEIGHT_TITLE = 0.2
 MATCH_THRESHOLD = 80.0
+
+def get_top_candidates(db: Session, ocr_call_number: str, limit: int = 5) -> List[BookMaster]:
+    """
+    [1단계 검색] PostgreSQL pg_trgm 확장의 <-> 연산자(Trigram 거리)를 사용하여
+    전체 DB에서 청구기호가 가장 유사한 Top N개의 도서를 추출합니다.
+    """
+    clean_call = (ocr_call_number or "").strip()
+    if not clean_call:
+        return []
+
+    # <-> 연산자는 거리를 의미하므로, 오름차순(거리가 짧은 순)으로 정렬하여 가장 유사한 limit개를 가져옵니다.
+    return (
+        db.query(BookMaster)
+        .order_by(BookMaster.call_number.op('<->')(clean_call))
+        .limit(limit)
+        .all()
+    )
 
 
 def decompose_korean(text: str) -> str:
