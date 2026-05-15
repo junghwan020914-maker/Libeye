@@ -4,7 +4,8 @@ import re
 
 # 수정됨: api. 접두사 제거 (컨테이너 내에서는 api 폴더 안의 파일들이 최상위 경로임)
 from database import get_db 
-from models import ScanSession, ScanResultDetail
+# 🚨 수정: ScanImage 모델 임포트 추가
+from models import ScanSession, ScanResultDetail, ScanImage
 
 router = APIRouter(prefix="/api/v1/sessions", tags=["Results"])
 
@@ -49,12 +50,24 @@ async def get_scan_results(session_id: str, db: Session = Depends(get_db)):
             "message": "AI analysis is not completed yet."
         }
         
-    results = db.query(ScanResultDetail).filter(ScanResultDetail.session_id == session_id).all()
+    # 🚨 수정: 해당 세션의 여러 이미지 조각들을 sequence_order 순으로 가져오기
+    images = db.query(ScanImage).filter(ScanImage.session_id == session_id).order_by(ScanImage.sequence_order).all()
+    image_list = [{
+        "image_id": img.image_id,
+        "image_url": _to_proxy_path(img.image_url),
+        "sequence_order": img.sequence_order
+    } for img in images]
+        
+    # 🚨 수정: 병합 후 최종 산출된 물리적 순서(detected_order) 기준으로 정렬하여 결과 반환
+    results = db.query(ScanResultDetail).filter(ScanResultDetail.session_id == session_id).order_by(ScanResultDetail.detected_order).all()
     
     detections = []
     for r in results:
         detections.append({
             "detection_id": r.detection_id,
+            # 🚨 추가됨: 프론트엔드에서 어느 이미지 조각의 결과인지 식별하기 위함
+            "source_image_id": r.source_image_id, 
+            "detected_order": r.detected_order,
             "bounding_box": r.bounding_box,
             "ocr_title": r.raw_ocr_title,
             "ocr_call_number": r.raw_ocr_call_number,
@@ -67,7 +80,8 @@ async def get_scan_results(session_id: str, db: Session = Depends(get_db)):
     
     return {
         "session_id": session_id,
-        "image_url": _to_proxy_path(session_info.image_url),
         "status": session_info.status,
+        # 🚨 수정: 기존 "image_url" 단일 키 대신, "images" 배열로 반환
+        "images": image_list,
         "detections": detections
     }

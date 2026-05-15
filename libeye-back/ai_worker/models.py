@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, Text
+from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -31,20 +31,37 @@ class BookMaster(Base):
     # 🚨 [추가해야 할 부분] 서가 내 올바른 순서 (오배열 판별용)
     expected_order = Column(Integer)
 
-# 3. Scan_Session (AI 분석 세션 관리)
+# 3. Scan_Session (AI 분석 세션 관리 - 칸 단위 '그룹'으로 변경)
 class ScanSession(Base):
     __tablename__ = 'scan_session'
     
     session_id = Column(String(50), primary_key=True)
     location_id = Column(String(50), ForeignKey('library_master.location_id'), nullable=True)
-    image_url = Column(String(255))
+    
+    # 🚨 수정: 다중 이미지를 위해 기존 단일 image_url, is_image_deleted 삭제
     status = Column(String(20), default='PENDING') # PENDING, PROCESSING, COMPLETED, FAILED
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    is_image_deleted = Column(Boolean, default=False)
     
-    # 세션 삭제 시 연관된 ScanResultDetail 기록들도 함께 지워지도록 cascade 설정
+    # 🚨 수정: 세션 삭제 시 연관된 스캔 이미지와 결과 데이터가 모두 삭제되도록 cascade 설정
+    images = relationship("ScanImage", back_populates="session", cascade="all, delete-orphan")
     results = relationship("ScanResultDetail", back_populates="session", cascade="all, delete-orphan")
 
+# 🚨 3-1. [신규 추가] Scan_Image (하나의 세션에 속한 여러 장의 조각 사진 관리)
+class ScanImage(Base):
+    __tablename__ = 'scan_image'
+
+    image_id = Column(String(50), primary_key=True)
+    session_id = Column(String(50), ForeignKey('scan_session.session_id', ondelete='CASCADE'), index=True)
+    image_url = Column(String(255), nullable=False)
+    
+    # 해당 칸에서 왼쪽부터 찍은 사진의 순서 (0, 1, 2...)
+    sequence_order = Column(Integer, nullable=False) 
+    is_deleted = Column(Boolean, default=False)
+    
+    # 양방향 관계 설정
+    session = relationship("ScanSession", back_populates="images")
+    results = relationship("ScanResultDetail", back_populates="source_image")
+    
 # 4. Scan_Result_Detail (YOLO + VLM 분석 결과 및 보정 데이터 저장)
 class ScanResultDetail(Base):
     __tablename__ = 'scan_result_detail'
@@ -54,31 +71,38 @@ class ScanResultDetail(Base):
     # 해당 스캔 세션 연결
     session_id = Column(String(50), ForeignKey('scan_session.session_id'), index=True)
     
+    # 🚨 [추가됨] 병합 과정에서 이 도서 객체가 주로 어느 이미지에서 추출되었는지 추적
+    source_image_id = Column(String(50), ForeignKey('scan_image.image_id', ondelete='SET NULL'), nullable=True)
+    
     # 책등 좌표
     bounding_box = Column(JSONB)
 
     # 1. AI 원본 데이터 (Gemma4가 추출한 책 제목, 청구기호 통째로 저장)
-    # 예: {"title": "나미야 잡화점의 기적", "call_number": "813.6 히15나"}
-    # 🚨 수정: JSONB 대신 개별 컬럼으로 분리
-    # raw_ocr_data = Column(JSONB)  <-- 삭제
-    raw_ocr_title = Column(Text)        # AI가 읽은 원본 제목
-    raw_ocr_call_number = Column(Text)  # AI가 읽은 원본 청구기호
-    
+    raw_ocr_title = Column(String(255))        # AI가 읽은 원본 제목
+    raw_ocr_call_number = Column(String(100))  # AI가 읽은 원본 청구기호
+
     # 2. 보정된 정답 데이터 연결 (DB Master 연동)
-    # 이 ID를 통해 BookMaster의 정답 title, call_number를 JOIN해서 가져옵니다.
     matched_book_id = Column(String(50), ForeignKey('book_master.book_id'), nullable=True)
 
-    # 사진 상 왼쪽부터의 물리적 순서 (오배열 판별에 사용)
+    # 🚨 [유지/중요] 여러 장의 사진을 중복 제거하고 병합한 후의 '해당 칸(Shelf) 전체 기준 물리적 최종 순서'
     detected_order = Column(Integer, nullable=False)
     
-     # 최종 상태 (MATCH, MISPLACED, MISSING, EXTRA, UNKNOWN, PENDING)
+    # 최종 상태 (MATCH, MISPLACED, MISSING, EXTRA, UNKNOWN, PENDING)
     status = Column(String(20), nullable=False, default="PENDING")
     
     # AI 인식 신뢰도 점수
     confidence = Column(Integer, default=0)
-
+    
     crop_image_url = Column(String(255), nullable=True) 
-
+    
+    # 🚨 수정: 양방향 관계(Relationship) 설정 업데이트
+    session = relationship("ScanSession", back_populates="results")
+    source_image = relationship("ScanImage", back_populates="results") # 추가됨
+    book = relationship("BookMaster") # 매칭된 도서 객체에 ORM으로 바로 접근 가능
+    confidence = Column(Integer, default=0)
+    
+    crop_image_url = Column(String(255), nullable=True) 
+    
     # 양방향 관계(Relationship) 설정
     session = relationship("ScanSession", back_populates="results")
     book = relationship("BookMaster") # 매칭된 도서 객체에 ORM으로 바로 접근 가능

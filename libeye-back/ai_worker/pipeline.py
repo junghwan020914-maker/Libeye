@@ -11,7 +11,8 @@ from service.detector import yolo_model, run_detection, crop_spine
 from service.ocr import extract_text_with_gemma
 from service.matcher import hybrid_book_matching_with_jamo, get_top_candidates
 from service.misplacement import detect_misplacements
-from models import ScanSession, ScanResultDetail, BookMaster
+# 🚨 수정됨: ScanImage 모델 임포트 추가
+from models import ScanSession, ScanResultDetail, BookMaster, ScanImage 
 
 # --- 앱 초기화 ---
 celery_app = Celery("tasks", broker=CELERY_BROKER_URL, backend=CELERY_RESULT_BACKEND)
@@ -24,14 +25,17 @@ ensure_buckets_exist()
 
 # --- 메인 파이프라인 ---
 
-@celery_app.task(name="process_image_task")
-def process_scan_session(session_id: str, original_file_name: str):
+# 🚨 수정됨: task 이름 및 매개변수 변경 (단일 파일명 대신 세션 ID만 받음)
+@celery_app.task(name="process_session_task")
+def process_scan_session(session_id: str):
     if yolo_model is None:
         return {"status": "error", "message": "YOLO model not loaded"}
 
     db = SessionLocal()
     session = None
-    scanned_results = []
+    
+    # 🚨 추가됨: 모든 이미지의 분석 결과를 하나로 누적할 전역 리스트
+    global_results = [] 
 
     try:
         session = db.query(ScanSession).filter(ScanSession.session_id == session_id).first()
@@ -41,65 +45,120 @@ def process_scan_session(session_id: str, original_file_name: str):
         session.status = "PROCESSING"
         db.commit()
 
-        # 1. MinIO에서 원본 이미지 다운로드
-        print(f"[{session_id}] 1. 원본 이미지 다운로드")
-        img = download_image("original-bucket", original_file_name)
-        if img is None:
-            raise RuntimeError(f"이미지 다운로드 실패: {original_file_name}")
+        # 🚨 추가됨: 해당 세션에 속한 이미지들을 물리적 순서(sequence_order)대로 모두 가져옴
+        images = db.query(ScanImage).filter(ScanImage.session_id == session_id).order_by(ScanImage.sequence_order).all()
 
-        # 2. YOLO 탐지
-        print(f"[{session_id}] 2. YOLO 탐지")
-        boxes, masks = run_detection(img)
+        # 🚨 수정됨: 여러 이미지를 순차적으로 처리하는 루프 추가
+        for img_record in images:
+            # MinIO URL에서 원본 파일명 추출 (예: session-xxx/img-yyy.jpg)
+            original_file_name = img_record.image_url.split("original-bucket/")[-1]
+            
+            # 1. MinIO에서 원본 이미지 다운로드
+            print(f"[{session_id}] 1. 원본 이미지 다운로드: {original_file_name}")
+            img = download_image("original-bucket", original_file_name)
+            if img is None:
+                print(f"[{session_id}] 이미지 다운로드 실패 (건너뜀): {original_file_name}")
+                continue
 
-        if boxes is None or len(boxes) == 0:
-            print(f"[{session_id}] 탐지된 책 없음")
-        else:
-            print(f"[{session_id}] {len(boxes)}권 탐지")
+            # 2. YOLO 탐지
+            print(f"[{session_id}] 2. YOLO 탐지 ({img_record.image_id})")
+            boxes, masks = run_detection(img)
+            
+            local_results = [] # 현재 이미지에서만 탐지된 결과
 
-            # [삭제됨] 기존의 위치 기반 일괄 DB 후보 조회 로직 제거
+            if boxes is None or len(boxes) == 0:
+                print(f"[{session_id}] 탐지된 책 없음 ({img_record.image_id})")
+            else:
+                print(f"[{session_id}] {len(boxes)}권 탐지 ({img_record.image_id})")
 
-            for idx, box in enumerate(boxes):
-                x1, y1, x2, y2 = map(int, box.xyxy[0])
+                for idx, box in enumerate(boxes):
+                    x1, y1, x2, y2 = map(int, box.xyxy[0])
 
-                # 3. 마스크 크롭 + MinIO 업로드
-                crop_img = crop_spine(img, box, masks, idx)
-                crop_key = f"{session_id}_crop_{idx}.jpg"
-                crop_url = upload_image("crop-bucket", crop_key, crop_img)
+                    # 3. 마스크 크롭 + MinIO 업로드 (🚨수정됨: 이름 충돌 방지를 위해 image_id 추가)
+                    crop_img = crop_spine(img, box, masks, idx)
+                    crop_key = f"{session_id}_{img_record.image_id}_crop_{idx}.jpg"
+                    crop_url = upload_image("crop-bucket", crop_key, crop_img)
 
-                # 4. Gemma OCR
-                _, buf = cv2.imencode(".jpg", crop_img)
-                b64 = base64.b64encode(buf).decode("utf-8")
-                print(f"[{session_id}] OCR 요청 중 (crop {idx})")
-                ocr_result = extract_text_with_gemma(b64)
+                    # 4. Gemma OCR
+                    _, buf = cv2.imencode(".jpg", crop_img)
+                    b64 = base64.b64encode(buf).decode("utf-8")
+                    print(f"[{session_id}] OCR 요청 중 (crop {idx})")
+                    ocr_result = extract_text_with_gemma(b64)
 
-                # 5. DB 하이브리드 퍼지 매칭 (전체 DB 대상 Top 5 검색 + 자소분리 정밀 매칭)
-                raw_call_number = ocr_result.get("call_number", "")
-                raw_title = ocr_result.get("title", "")
-                
-                matched = None
-                if raw_call_number.strip():
-                    print(f"[{session_id}] 1차 전역 DB 검색 (청구기호: {raw_call_number})")
-                    top_candidates = get_top_candidates(db, raw_call_number, limit=5)
+                    # 5. DB 하이브리드 퍼지 매칭 (기존 로직 그대로 유지)
+                    raw_call_number = ocr_result.get("call_number", "")
+                    raw_title = ocr_result.get("title", "")
                     
-                    print(f"[{session_id}] 2차 하이브리드 정밀 매칭 (후보 {len(top_candidates)}건)")
-                    matched = hybrid_book_matching_with_jamo(raw_call_number, raw_title, top_candidates)
-                else:
-                    print(f"[{session_id}] 청구기호 OCR 실패로 매칭 생략")
+                    matched = None
+                    if raw_call_number.strip():
+                        print(f"[{session_id}] 1차 전역 DB 검색 (청구기호: {raw_call_number})")
+                        top_candidates = get_top_candidates(db, raw_call_number, limit=5)
+                        
+                        print(f"[{session_id}] 2차 하이브리드 정밀 매칭 (후보 {len(top_candidates)}건)")
+                        matched = hybrid_book_matching_with_jamo(raw_call_number, raw_title, top_candidates)
+                    else:
+                        print(f"[{session_id}] 청구기호 OCR 실패로 매칭 생략")
 
-                scanned_results.append({
-                    "bounding_box": {"x": x1, "y": y1, "w": x2 - x1, "h": y2 - y1},
-                    "raw_ocr_data": ocr_result,
-                    "matched_book_id":  matched.book_id         if matched else None,
-                    "assigned_loc_id":  matched.assigned_loc_id if matched else None,
-                    "expected_order":   matched.expected_order  if matched else None,
-                    "confidence": int(box.conf[0] * 100),
-                    "crop_url": crop_url,
-                })
+                    local_results.append({
+                        "source_image_id": img_record.image_id, # 🚨 추가됨: 출처 이미지 기록
+                        "bounding_box": {"x": x1, "y": y1, "w": x2 - x1, "h": y2 - y1},
+                        "raw_ocr_data": ocr_result,
+                        "matched_book_id":  matched.book_id         if matched else None,
+                        "assigned_loc_id":  matched.assigned_loc_id if matched else None,
+                        "expected_order":   matched.expected_order  if matched else None,
+                        "confidence": int(box.conf[0] * 100),
+                        "crop_url": crop_url,
+                    })
 
-        # 6. x 좌표 정렬 + 오배열 판별
-        print(f"[{session_id}] 6. 오배열 판별")
-        scanned_results.sort(key=lambda r: r["bounding_box"]["x"])
-        final_results = detect_misplacements(scanned_results, session.location_id if session else None)
+            # 현재 이미지 내에서 물리적 순서(x 좌표)대로 먼저 정렬
+            local_results.sort(key=lambda r: r["bounding_box"]["x"])
+
+            # 🚨 [핵심 알고리즘] 중복 제거(Deduplication) 및 병합 로직
+            if global_results and local_results:
+                # N번째 이미지의 우측 끝 3권과 N+1번째 이미지의 좌측 끝 3권을 교차 비교
+                overlap_window = 3
+                last_globals = global_results[-overlap_window:]
+                first_locals = local_results[:overlap_window]
+                
+                duplicate_local_indices = set()
+                
+                for l_idx, l_book in enumerate(first_locals):
+                    for g_idx_offset, g_book in enumerate(last_globals):
+                        g_idx = len(global_results) - overlap_window + g_idx_offset
+                        if g_idx < 0: continue
+                        
+                        is_match = False
+                        
+                        # 기준 1: 매칭된 정답 도서 ID가 동일한 경우
+                        if g_book["matched_book_id"] and l_book["matched_book_id"]:
+                            if g_book["matched_book_id"] == l_book["matched_book_id"]:
+                                is_match = True
+                        # 기준 2: 정답은 못 찾았지만 OCR 추출 청구기호 텍스트가 완전히 일치하는 경우
+                        elif g_book["raw_ocr_data"].get("call_number") and l_book["raw_ocr_data"].get("call_number"):
+                            if g_book["raw_ocr_data"]["call_number"] == l_book["raw_ocr_data"]["call_number"]:
+                                is_match = True
+                                
+                        if is_match:
+                            # 동일한 책으로 판별됨: 신뢰도(Confidence)가 더 높은 쪽 정보로 갱신
+                            if l_book["confidence"] > g_book["confidence"]:
+                                global_results[g_idx] = l_book
+                            
+                            # 현재 이미지의 해당 도서는 전역 리스트에 중복 추가하지 않도록 마킹
+                            duplicate_local_indices.add(l_idx)
+                            break # 매칭 찾았으면 다음 로컬 도서로 넘어감
+                            
+                # 중복 마킹되지 않은 새로운 도서들만 전역 리스트의 뒤에 이어 붙임
+                for l_idx, l_book in enumerate(local_results):
+                    if l_idx not in duplicate_local_indices:
+                        global_results.append(l_book)
+            else:
+                # 첫 번째 이미지이거나, 전역 리스트가 비어있으면 그대로 병합
+                global_results.extend(local_results)
+
+        # 6. 병합된 전체 리스트를 통해 오배열 판별 
+        # (이미 sequence_order 순서대로 병합되면서 물리적 순서가 완성된 상태)
+        print(f"[{session_id}] 6. 오배열 판별 (총 {len(global_results)}권 병합됨)")
+        final_results = detect_misplacements(global_results, session.location_id if session else None)
 
         # 7. DB 저장
         print(f"[{session_id}] 7. 결과 저장")
@@ -108,11 +167,12 @@ def process_scan_session(session_id: str, original_file_name: str):
             db.add(ScanResultDetail(
                 detection_id=f"{session_id}-det-{idx}",
                 session_id=session_id,
+                source_image_id=result.get("source_image_id"), # 🚨 추가됨: 출처 이미지 ID 매핑
                 bounding_box=result["bounding_box"],
                 raw_ocr_title=ocr.get("title", ""),
                 raw_ocr_call_number=ocr.get("call_number", ""),
                 matched_book_id=result["matched_book_id"],
-                detected_order=idx + 1,
+                detected_order=idx + 1, # 1번부터 전체 도서에 대한 새로운 순서 부여
                 status=result["status"],
                 confidence=result["confidence"],
                 crop_image_url=result.get("crop_url"),

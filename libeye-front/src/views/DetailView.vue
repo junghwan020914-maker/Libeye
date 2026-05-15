@@ -42,28 +42,36 @@ const goBack = () => {
 
     <!-- Results State -->
     <template v-else-if="sessionData">
-      <div class="h-48 bg-stone-300 relative overflow-hidden flex items-end px-4 gap-2 pb-2 shrink-0 shadow-inner">
-        <img v-if="sessionData.image_url" :src="sessionData.image_url" class="absolute inset-0 w-full h-full object-cover opacity-50" />
-        <div v-else class="absolute inset-0 flex justify-center items-center opacity-30 text-5xl">📚📚📚</div>
+      <div class="h-48 bg-stone-300 relative flex overflow-x-auto overflow-y-hidden snap-x shrink-0 shadow-inner scrollbar-hide">
         
-        <!-- AR Boxes dynamically rendered based on detections -->
-        <template v-if="sessionData.detections && sessionData.detections.length > 0">
-          <div v-for="d in sessionData.detections" :key="d.detection_id" 
-               class="ar-box flex-1 h-[80%] bg-stone-400/80 relative border-2 flex justify-center"
-               :class="{
-                 'border-[#2E7D32]': d.status === 'MATCH',
-                 'border-[#D32F2F] bg-red-500/30 shadow-[0_0_15px_rgba(211,47,47,0.4)]': d.status === 'MISPLACED',
-                 'border-[#F57C00] bg-orange-500/30': d.status === 'UNKNOWN' || d.status === 'MISSING'
-               }">
-            <span v-if="d.status !== 'MATCH'" class="absolute -top-5 bg-white border text-[8px] px-1 rounded whitespace-nowrap"
-                  :class="{
-                    'border-[#D32F2F] text-[#D32F2F]': d.status === 'MISPLACED',
-                    'border-[#F57C00] text-[#F57C00]': d.status === 'UNKNOWN' || d.status === 'MISSING'
-                  }">
-              {{ d.status === 'MISPLACED' ? '오배열' : '확인요망' }}
-            </span>
-          </div>
-        </template>
+        <div v-if="!sessionData.images || sessionData.images.length === 0" class="absolute inset-0 flex justify-center items-center opacity-30 text-5xl w-full">📚📚📚</div>
+        
+        <div v-for="img in sessionData.images" :key="img.image_id" 
+             class="relative h-full min-w-[280px] sm:min-w-[320px] flex-shrink-0 snap-center border-r-2 border-stone-800/40 flex items-end px-2 gap-1 pb-2">
+          
+          <img :src="img.image_url" class="absolute inset-0 w-full h-full object-cover opacity-50" />
+          
+          <template v-for="d in sessionData.detections" :key="d.detection_id">
+            <div v-if="d.source_image_id === img.image_id"
+                 class="ar-box flex-1 h-[80%] bg-stone-400/80 relative border-2 flex justify-center z-10 transition-all hover:scale-105"
+                 :class="{
+                   'border-[#2E7D32]': d.status === 'MATCH',
+                   'border-[#D32F2F] bg-red-500/30 shadow-[0_0_15px_rgba(211,47,47,0.4)]': d.status === 'MISPLACED',
+                   'border-[#F57C00] bg-orange-500/30': d.status === 'UNKNOWN' || d.status === 'MISSING'
+                 }">
+              <span class="absolute -top-6 bg-stone-800 text-white text-[10px] w-5 h-5 flex items-center justify-center rounded-full font-bold shadow-md">
+                {{ d.detected_order }}
+              </span>
+              <span v-if="d.status !== 'MATCH'" class="absolute -top-5 left-6 bg-white border text-[8px] px-1 rounded whitespace-nowrap"
+                    :class="{
+                      'border-[#D32F2F] text-[#D32F2F]': d.status === 'MISPLACED',
+                      'border-[#F57C00] text-[#F57C00]': d.status === 'UNKNOWN' || d.status === 'MISSING'
+                    }">
+                {{ d.status === 'MISPLACED' ? '오배열' : '확인요망' }}
+              </span>
+            </div>
+          </template>
+        </div>
       </div>
 
       <div class="flex-1 overflow-y-auto p-4 pb-20">

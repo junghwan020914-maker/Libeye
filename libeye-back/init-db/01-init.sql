@@ -34,37 +34,40 @@ CREATE TABLE Book_Master (
 
 -- 3.1 스캔 세션 로그 테이블 (Scan_Session)
 CREATE TABLE Scan_Session (
-    session_id VARCHAR(50) PRIMARY KEY, -- ✅ 파이썬의 String(50)과 일치시킴
+    session_id VARCHAR(50) PRIMARY KEY, 
     location_id VARCHAR(50) REFERENCES Library_Master(location_id),
-    -- user_id VARCHAR(50) NOT NULL, 스캔 사용자 아직 반영 안됨.
     scan_time TIMESTAMP DEFAULT NOW(),
-    image_url VARCHAR(500) NOT NULL,
+    -- 🚨 수정됨: image_url 및 is_image_deleted 컬럼 삭제
     status VARCHAR(20) DEFAULT 'PENDING',
     lux_level INT,
-    -- overall_status VARCHAR(20) NOT NULL, -- COMPLETED, NEEDS_ACTION
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    is_image_deleted BOOLEAN DEFAULT FALSE -- 온프레미스 스토리지 정책(7일 후 삭제) 반영 컬럼
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 3.2 AI 인식 상세 결과 테이블 (Scan_Result_Detail)
+-- 🚨 3.2 [신규 추가] 스캔 이미지 조각 테이블 (Scan_Image)
+CREATE TABLE Scan_Image (
+    image_id VARCHAR(50) PRIMARY KEY,
+    session_id VARCHAR(50) REFERENCES Scan_Session(session_id) ON DELETE CASCADE,
+    image_url VARCHAR(500) NOT NULL,
+    sequence_order INT NOT NULL,
+    is_deleted BOOLEAN DEFAULT FALSE
+);
+
+-- 3.3 AI 인식 상세 결과 테이블 (Scan_Result_Detail)
 CREATE TABLE Scan_Result_Detail (
-    detection_id VARCHAR(50) PRIMARY KEY, -- ✅ 변경
-    session_id VARCHAR(50) REFERENCES Scan_Session(session_id) ON DELETE CASCADE, -- 세션 삭제 시 연쇄 삭제
-    matched_book_id VARCHAR(50) REFERENCES Book_Master(book_id), -- 미인식/초과 시 NULL 가능
+    detection_id VARCHAR(50) PRIMARY KEY, 
+    session_id VARCHAR(50) REFERENCES Scan_Session(session_id) ON DELETE CASCADE,
+    -- 🚨 수정됨: source_image_id 추가 및 외래키 설정
+    source_image_id VARCHAR(50) REFERENCES Scan_Image(image_id) ON DELETE SET NULL, 
+    matched_book_id VARCHAR(50) REFERENCES Book_Master(book_id), 
     
-    -- [핵심 변경] AI가 추출한 원본 JSON 데이터 저장 (도서명, 청구기호 등)
-    -- 예: {"title": "나미야 잡화점", "call_number": "813.6 히15나"}
-    -- raw_ocr_data JSONB,
-    -- 🚨 수정: 개별 VARCHAR 컬럼으로 변경
     raw_ocr_title VARCHAR(255),
     raw_ocr_call_number VARCHAR(100),
-
     crop_image_url VARCHAR(255),
     
     confidence DECIMAL(5,2),
-    bounding_box JSONB, -- AR 오버레이 및 프론트엔드 확장을 위한 JSONB 타입 적용 {x, y, w, h}
+    bounding_box JSONB, 
     detected_order INT NOT NULL,
-    status VARCHAR(20) NOT NULL -- MATCH, MISPLACED, MISSING, EXTRA, UNKNOWN
+    status VARCHAR(20) NOT NULL 
 );
 
 -- 3.3 수동 수정 이력 테이블 (Manual_Correction)

@@ -18,6 +18,7 @@ const locations = ref<any[]>([]);
 const selectedLocation = ref<string | null>(null);
 const showLocationModal = ref(true);
 
+
 // Crop & Upload State
 const isCropping = ref(false);
 const uploadedImage = ref<HTMLImageElement | null>(null);
@@ -26,6 +27,11 @@ const cropEnd = ref({ x: 0, y: 0 });
 const isDraggingCrop = ref(false);
 const fileInputRef = ref<HTMLInputElement | null>(null);
 const imageContainerRef = ref<HTMLDivElement | null>(null);
+
+// 🚨 기존 상태 변수들 아래에 다중 촬영용 상태 추가
+const capturedFiles = ref<File[]>([]);
+const capturedPreviews = ref<string[]>([]);
+const isConfirming = ref(false); // 촬영 후 확인 창 표시 여부
 
 // Portrait mode check
 const isPortrait = ref(window.matchMedia("(orientation: portrait)").matches);
@@ -80,9 +86,17 @@ const stopCamera = () => {
   }
 };
 
-// 💡 HTML(new_dash2)의 동작 방식과 동일한 원본 변환 로직 (DirectUploader 참조)
-const getPureBase64 = (dataUrl: string): string => {
-  return dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
+// 🚨 기존 getPureBase64 함수 삭제 후 아래 함수로 교체
+const dataURLtoFile = (dataurl: string, filename: string): File => {
+  const arr = dataurl.split(',');
+  const mime = arr[0].match(/:(.*?);/)?.[1] || 'image/jpeg';
+  const bstr = atob(arr[1]);
+  let n = bstr.length;
+  const u8arr = new Uint8Array(n);
+  while (n--) {
+    u8arr[n] = bstr.charCodeAt(n);
+  }
+  return new File([u8arr], filename, { type: mime });
 };
 
 const takePhoto = async () => {
@@ -98,26 +112,18 @@ const takePhoto = async () => {
   
   ctx.drawImage(video, 0, 0);
   const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
-  previewUrl.value = dataUrl;
   
   stopCamera();
   
-  isUploading.value = true;
-  try {
-    const base64Image = getPureBase64(dataUrl);
-    if (!base64Image) throw new Error("Base64 string is empty");
-    
-    const response = await startSession(selectedLocation.value || 'UNKNOWN', base64Image);
-    const sessionId = response.session_id;
-    
-    router.push({ name: 'detail', query: { sessionId } });
-  } catch (err) {
-    console.error('Upload error:', err);
-    alert('업로드 중 오류가 발생했습니다.');
-    isUploading.value = false;
-    previewUrl.value = null;
-    startCamera();
+  // File 객체로 변환하여 배열에 누적
+  const file = dataURLtoFile(dataUrl, `camera_${Date.now()}.jpg`);
+  if (file) {
+    capturedFiles.value.push(file);
+    capturedPreviews.value.push(dataUrl);
   }
+  
+  // 확인 창 띄우기
+  isConfirming.value = true;
 };
 
 const triggerFileUpload = () => {
@@ -228,17 +234,52 @@ const applyCropAndUpload = async () => {
     return;
   }
   
+  // File 객체로 변환하여 배열에 누적
+  const file = dataURLtoFile(croppedDataUrl, `crop_${Date.now()}.jpg`);
+  if (file) {
+    capturedFiles.value.push(file);
+    capturedPreviews.value.push(croppedDataUrl);
+  }
+  
+  isCropping.value = false;
+  previewUrl.value = null;
+  // 확인 창 띄우기
+  isConfirming.value = true;
+};
+
+
+// 🚨 추가됨: 이어서 촬영하기, 특정 사진 삭제하기, 최종 전체 업로드하기 함수
+const takeAnother = () => {
+  isConfirming.value = false;
+  previewUrl.value = null;
+  startCamera();
+};
+
+const removeCaptured = (index: number) => {
+  capturedFiles.value.splice(index, 1);
+  capturedPreviews.value.splice(index, 1);
+  // 만약 다 지웠다면 다시 카메라 화면으로 복귀
+  if (capturedFiles.value.length === 0) {
+    takeAnother();
+  }
+};
+
+const uploadAll = async () => {
+  if (capturedFiles.value.length === 0) return;
+  
   isUploading.value = true;
   try {
-    // DirectUploader 방식 적용
-    const base64Image = getPureBase64(croppedDataUrl);
-    if (!base64Image) throw new Error("Invalid base64 payload");
+    // 누적된 전체 파일 배열을 서버로 전송!
+    const response = await startSession(selectedLocation.value || 'UNKNOWN', capturedFiles.value);
     
-    const response = await startSession(selectedLocation.value || 'UNKNOWN', base64Image);
+    // 업로드 성공 시 대기열 비우고 DetailView로 이동
+    capturedFiles.value = [];
+    capturedPreviews.value = [];
     router.push({ name: 'detail', query: { sessionId: response.session_id } });
   } catch (err) {
     console.error('Upload error:', err);
     alert('업로드 중 오류가 발생했습니다.');
+  } finally {
     isUploading.value = false;
   }
 };
@@ -246,8 +287,11 @@ const applyCropAndUpload = async () => {
 const simulateCapture = async () => {
   isUploading.value = true;
   try {
-    const dummyBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=";
-    const response = await startSession(selectedLocation.value || 'UNKNOWN', dummyBase64);
+    // 🚨 수정됨: Data URL 형식을 갖춘 더미 문자열로 변경
+    const dummyDataUrl = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=";
+    const file = dataURLtoFile(dummyDataUrl, 'dummy.png');
+    
+    const response = await startSession(selectedLocation.value || 'UNKNOWN', [file]);
     router.push({ name: 'detail', query: { sessionId: response.session_id } });
   } catch (err) {
     console.error('Upload error:', err);
@@ -406,6 +450,34 @@ onBeforeUnmount(() => {
       <button v-else class="w-12 h-12 text-white/80 text-2xl flex items-center justify-center">
         🔄
       </button>
+    </div>
+    
+    <div v-if="isConfirming" class="absolute inset-0 bg-stone-900 z-[60] flex flex-col items-center justify-center p-6">
+      <h2 class="text-white text-2xl font-bold mb-2">서가 촬영 확인</h2>
+      <p class="text-stone-400 mb-6 text-sm">왼쪽부터 순서대로 나열되어 있는지 확인해주세요.</p>
+
+      <div class="flex gap-4 overflow-x-auto w-full pb-4 mb-8 snap-x scrollbar-hide">
+        <div v-for="(url, idx) in capturedPreviews" :key="idx" class="relative min-w-[140px] h-[200px] snap-center shrink-0">
+          <img :src="url" class="w-full h-full object-cover rounded-xl border-2 border-stone-600" />
+          <div class="absolute top-0 left-0 bg-black/80 text-white text-xs font-bold px-3 py-1.5 rounded-br-xl rounded-tl-xl">
+            {{ idx + 1 }}
+          </div>
+          <button @click="removeCaptured(idx)" class="absolute top-2 right-2 bg-red-500/90 hover:bg-red-500 rounded-full w-8 h-8 text-white font-bold flex items-center justify-center shadow-md active:scale-90 transition-transform">
+            ✕
+          </button>
+        </div>
+      </div>
+
+      <div class="flex flex-col gap-4 w-full max-w-sm mt-auto pb-10">
+        <button @click="takeAnother" class="w-full py-4 bg-stone-800 text-white border border-stone-600 rounded-2xl font-bold text-lg active:bg-stone-700 transition-colors">
+          ➕ 다음 칸 이어서 촬영
+        </button>
+        
+        <button @click="uploadAll" :disabled="isUploading" class="w-full py-5 bg-[#4CAF50] text-white rounded-2xl font-black text-xl active:scale-95 transition-all shadow-[0_0_20px_rgba(76,175,80,0.3)] disabled:opacity-50">
+          <span v-if="!isUploading">🚀 총 {{ capturedFiles.length }}장 분석 시작</span>
+          <span v-else>⏳ 업로드 중...</span>
+        </button>
+      </div>
     </div>
 
     <!-- 로딩 오버레이 -->

@@ -1,10 +1,20 @@
 import { api } from './axios';
 
-export const startSession = async (locationId: string, imageBase64: string) => {
-  // 💡 HTML의 fetch 로직과 100% 동일한 JSON POST 요청
-  const response = await api.post('/v1/sessions', {
-    location_id: locationId,
-    image_base64: imageBase64
+// 🚨 수정됨: imageBase64(string) 대신 files(File 배열)을 받도록 변경
+export const startSession = async (locationId: string, files: File[]) => {
+  const formData = new FormData();
+  formData.append('location_id', locationId);
+  
+  // 백엔드의 `files: List[UploadFile] = File(...)` 파라미터에 맞추어 여러 파일을 동일한 키('files')로 추가
+  files.forEach(file => {
+    formData.append('files', file);
+  });
+
+  // axios가 FormData를 전송할 때 자동으로 적절한 boundary와 함께 Content-Type을 설정합니다.
+  const response = await api.post('/v1/sessions', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
   });
   return response.data;
 };
