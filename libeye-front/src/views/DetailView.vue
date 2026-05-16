@@ -49,7 +49,7 @@ const goBack = () => {
         <div v-for="img in sessionData.images" :key="img.image_id" 
              class="relative h-full min-w-[280px] sm:min-w-[320px] flex-shrink-0 snap-center border-r-2 border-stone-800/40 flex items-end px-2 gap-1 pb-2">
           
-          <img :src="img.image_url" class="absolute inset-0 w-full h-full object-cover opacity-50" />
+          <img :src="img.image_url" class="absolute inset-0 w-full h-full object-contain opacity-50" />
           
           <template v-for="d in sessionData.detections" :key="d.detection_id">
             <div v-if="d.source_image_id === img.image_id"
