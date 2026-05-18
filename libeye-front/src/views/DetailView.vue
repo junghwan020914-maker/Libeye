@@ -14,6 +14,67 @@ const showEditModal = ref(false);
 const goBack = () => {
   router.push('/history');
 };
+
+// --- [추가된 핵심 로직] 이미지 해상도 비율 및 오프셋 계산 ---
+const imageDimensions = ref<Record<string, { scaleX: number, scaleY: number, offsetX: number, offsetY: number }>>({});
+
+const onImageLoad = (event: Event, imageId: string) => {
+  const img = event.target as HTMLImageElement;
+  
+  // 1. 화면에 표시된 컨테이너 크기 vs 실제 원본 이미지 크기
+  const containerW = img.clientWidth;
+  const containerH = img.clientHeight;
+  const naturalW = img.naturalWidth;
+  const naturalH = img.naturalHeight;
+
+  // 2. object-contain으로 인한 스케일 비율 계산
+  const containerRatio = containerW / containerH;
+  const imageRatio = naturalW / naturalH;
+
+  let renderedW, renderedH, offsetX = 0, offsetY = 0;
+
+  if (imageRatio > containerRatio) {
+    // 이미지가 컨테이너보다 가로로 길 때 (상하 여백 발생)
+    renderedW = containerW;
+    renderedH = containerW / imageRatio;
+    offsetY = (containerH - renderedH) / 2;
+  } else {
+    // 이미지가 컨테이너보다 세로로 길 때 (좌우 여백 발생)
+    renderedH = containerH;
+    renderedW = containerH * imageRatio;
+    offsetX = (containerW - renderedW) / 2;
+  }
+
+  // 3. 변환된 스케일과 오프셋 저장
+  imageDimensions.value[imageId] = {
+    scaleX: renderedW / naturalW,
+    scaleY: renderedH / naturalH,
+    offsetX,
+    offsetY
+  };
+};
+
+// --- [추가된 핵심 로직] YOLO 좌표를 CSS 픽셀로 변환 ---
+const getBoxStyle = (detection: any, imageId: string) => {
+  const dim = imageDimensions.value[imageId];
+  
+  // 이미지가 아직 로드되지 않았거나 bounding_box 값이 없으면 렌더링 숨김
+  if (!dim || !detection.bounding_box) return { display: 'none' };
+  
+  // DB에서 JSON 문자열로 넘어올 경우를 대비한 안전한 파싱
+  const box = typeof detection.bounding_box === 'string' 
+    ? JSON.parse(detection.bounding_box) 
+    : detection.bounding_box;
+
+  return {
+    position: 'absolute',
+    left: `${dim.offsetX + (box.x * dim.scaleX)}px`,
+    top: `${dim.offsetY + (box.y * dim.scaleY)}px`,
+    width: `${box.w * dim.scaleX}px`,
+    height: `${box.h * dim.scaleY}px`,
+  };
+};
+
 </script>
 
 <template>
@@ -47,18 +108,20 @@ const goBack = () => {
         <div v-if="!sessionData.images || sessionData.images.length === 0" class="absolute inset-0 flex justify-center items-center opacity-30 text-5xl w-full">📚📚📚</div>
         
         <div v-for="img in sessionData.images" :key="img.image_id" 
-             class="relative h-full min-w-[280px] sm:min-w-[320px] flex-shrink-0 snap-center border-r-2 border-stone-800/40 flex items-end px-2 gap-1 pb-2">
+             class="relative h-full min-w-[280px] sm:min-w-[320px] flex-shrink-0 snap-center border-r-2 border-stone-800/40">
           
-          <img :src="img.image_url" class="absolute inset-0 w-full h-full object-contain opacity-50" />
+          <img :src="img.image_url" @load="(e) => onImageLoad(e, img.image_id)" class="absolute inset-0 w-full h-full object-contain opacity-50" />
           
           <template v-for="d in sessionData.detections" :key="d.detection_id">
             <div v-if="d.source_image_id === img.image_id"
-                 class="ar-box flex-1 h-[80%] bg-stone-400/80 relative border-2 flex justify-center z-10 transition-all hover:scale-105"
+                 class="ar-box absolute flex justify-center z-10 transition-all hover:scale-105"
+                 :style="getBoxStyle(d, img.image_id)"
                  :class="{
-                   'border-[#2E7D32]': d.status === 'MATCH',
-                   'border-[#D32F2F] bg-red-500/30 shadow-[0_0_15px_rgba(211,47,47,0.4)]': d.status === 'MISPLACED',
-                   'border-[#F57C00] bg-orange-500/30': d.status === 'UNKNOWN' || d.status === 'MISSING'
+                   'border-2 border-[#2E7D32] bg-green-500/10': d.status === 'MATCH',
+                   'border-2 border-[#D32F2F] bg-red-500/30 shadow-[0_0_15px_rgba(211,47,47,0.4)]': d.status === 'MISPLACED',
+                   'border-2 border-[#F57C00] bg-orange-500/30': d.status === 'UNKNOWN' || d.status === 'MISSING'
                  }">
+                 
               <span class="absolute -top-6 bg-stone-800 text-white text-[10px] w-5 h-5 flex items-center justify-center rounded-full font-bold shadow-md">
                 {{ d.detected_order }}
               </span>
