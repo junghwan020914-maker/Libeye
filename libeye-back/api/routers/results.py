@@ -5,7 +5,7 @@ import re
 # 수정됨: api. 접두사 제거 (컨테이너 내에서는 api 폴더 안의 파일들이 최상위 경로임)
 from database import get_db 
 # 🚨 수정: ScanImage 모델 임포트 추가
-from models import ScanSession, ScanResultDetail, ScanImage
+from models import ScanSession, ScanResultDetail, ScanImage, BookMaster
 
 router = APIRouter(prefix="/api/v1/sessions", tags=["Results"])
 
@@ -59,6 +59,41 @@ async def get_scan_results(session_id: str, db: Session = Depends(get_db)):
         "sequence_order": img.sequence_order
     } for img in images]
         
+    # 🚨 [추가됨] 1. 해당 서가(location_id)에 원래 배정된 '전체 도서 목록' 조회 (순서대로)
+    expected_books_query = db.query(BookMaster).filter(
+        BookMaster.assigned_loc_id == session_info.location_id
+    ).order_by(BookMaster.expected_order).all()
+    
+    expected_books = [{
+        "book_id": b.book_id,
+        "title": b.title,
+        "call_number": b.call_number,
+        "expected_order": b.expected_order
+    } for b in expected_books_query]
+        
+    results = db.query(ScanResultDetail).filter(ScanResultDetail.session_id == session_id).order_by(ScanResultDetail.detected_order).all()
+    
+    detections = []
+    for r in results:
+        # 🚨 [수정됨] 2. 매칭된 도서(book)가 있다면, 원래 배정된 위치와 순서를 프론트엔드로 전달
+        book_info = r.book 
+        
+        detections.append({
+            "detection_id": r.detection_id,
+            "source_image_id": r.source_image_id, 
+            "detected_order": r.detected_order,
+            "bounding_box": r.bounding_box,
+            "ocr_title": r.raw_ocr_title,
+            "ocr_call_number": r.raw_ocr_call_number,
+            "status": r.status,
+            "matched_book_id": r.matched_book_id,
+            "expected_order": book_info.expected_order if book_info else None,      # 원래 있어야 할 순서
+            "assigned_loc_id": book_info.assigned_loc_id if book_info else None,    # 원래 있어야 할 서가 위치 (EXTRA 판별용)
+            "crop_image_url": _to_proxy_path(r.crop_image_url),
+            "confidence": r.confidence
+        })
+        
+    
     # 🚨 수정: 병합 후 최종 산출된 물리적 순서(detected_order) 기준으로 정렬하여 결과 반환
     results = db.query(ScanResultDetail).filter(ScanResultDetail.session_id == session_id).order_by(ScanResultDetail.detected_order).all()
     
@@ -85,5 +120,6 @@ async def get_scan_results(session_id: str, db: Session = Depends(get_db)):
         "location_id": session_info.location_id, # 🚨 추가됨: 완료 상태일 때 위치 정보 반환
         # 🚨 수정: 기존 "image_url" 단일 키 대신, "images" 배열로 반환
         "images": image_list,
+        "expected_books": expected_books, # 🚨 [추가됨] 원본 도서 목록 반환
         "detections": detections
     }
