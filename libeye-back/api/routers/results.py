@@ -47,6 +47,7 @@ async def get_scan_results(session_id: str, db: Session = Depends(get_db)):
         return {
             "session_id": session_id,
             "status": session_info.status,
+            "location_id": session_info.location_id, # 🚨 추가됨: 로딩 중일 때도 위치를 표시하기 위함
             "message": "AI analysis is not completed yet."
         }
         
@@ -81,6 +82,7 @@ async def get_scan_results(session_id: str, db: Session = Depends(get_db)):
     return {
         "session_id": session_id,
         "status": session_info.status,
+        "location_id": session_info.location_id, # 🚨 추가됨: 완료 상태일 때 위치 정보 반환
         # 🚨 수정: 기존 "image_url" 단일 키 대신, "images" 배열로 반환
         "images": image_list,
         "detections": detections

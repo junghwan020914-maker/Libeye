@@ -83,9 +83,12 @@ const getBoxStyle = (detection: any, imageId: string) => {
       <button @click="goBack" class="p-2 text-stone-600 text-xl font-bold">◀</button>
       <div class="text-center">
         <h1 class="text-sm font-extrabold text-stone-900">상세 분석 및 조치</h1>
-        <p class="text-[9px] text-stone-500">인문과학실 A-2-3</p>
-      </div>
-      <div class="w-10"></div>
+    
+    	<p class="text-[9px] text-stone-500">
+	  {{ sessionData?.location_name || sessionData?.location_id || '위치 정보 로딩 중...' }}
+    	</p>
+  	</div>
+  	<div class="w-10"></div>
     </header>
 
     <!-- Polling Loading State -->
