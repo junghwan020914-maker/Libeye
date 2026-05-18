@@ -8,7 +8,4 @@ tunnels:
     proto: http
     addr: libeye-frontend:5173
 
-  # MinIO API 터널 (신규) - 이미지 접근용
-  minio:
-    proto: http
-    addr: minio:9000
+
