@@ -23,12 +23,11 @@ onMounted(async () => {
     if (typeCanvas.value) {
       const errorData = [
         data.error_ratios.MISPLACED || 0,
-        data.error_ratios.MISSING || 0,
-        (data.error_ratios.UNKNOWN || 0) + (data.error_ratios.EXTRA || 0)
+        data.error_ratios.UNKNOWN || 0,
       ];
       new Chart(typeCanvas.value, {
         type: 'doughnut',
-        data: { labels: ['오배열','누락','기타오류'], datasets: [{ data: errorData, backgroundColor: ['#D32F2F','#1976D2','#F57C00'], borderWidth: 0, cutout: '60%' }] },
+        data: { labels: ['오배열', '인식실패'], datasets: [{ data: errorData, backgroundColor: ['#D32F2F', '#F57C00'], borderWidth: 0, cutout: '60%' }] },
         options: { responsive: true, maintainAspectRatio: false, plugins: { legend: {position: 'bottom', labels: {boxWidth: 8, font:{size: 9}}} } }
       });
     }
