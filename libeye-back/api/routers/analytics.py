@@ -1,43 +1,48 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from database import get_db
-from models import ScanSession, ScanResultDetail
-from datetime import datetime, timedelta
+from models import DailyAnalytics, AnalyticsTotal
+from datetime import date, timedelta
 
 router = APIRouter(prefix="/api/v1/analytics", tags=["Analytics"])
 
+
 @router.get("/dashboard")
 def get_analytics_dashboard(db: Session = Depends(get_db)):
-    # Mocked data for dashboard if actual logic is complex
-    # You would typically group by date, count statuses etc.
-    # We will simulate the values based on existing entries for simplicity.
-    
-    results = db.query(ScanResultDetail).all()
-    total_results = len(results)
-    
-    error_types = {
-        "MISPLACED": 0,
-        "MISSING": 0,
-        "UNKNOWN": 0,
-        "EXTRA": 0
-    }
-    
-    success_count = 0
-    
-    for r in results:
-        if r.status in error_types:
-            error_types[r.status] += 1
-        elif r.status == "MATCH":
-            success_count += 1
-            
-    # Calculate simple AI success vs manual
-    # Here we just treat MATCH as success for now.
-    ai_success = 92 # Hardcoded percentage for demo if needed, or derived
-    
-    weekly_data = [120, 150, 180, 140, 210, 80] # Simulated daily scans
-    
+    # ── 주간 서가 점검량 (DailyAnalytics) ──────────────────────────────────
+    today = date.today()
+    monday = today - timedelta(days=today.weekday())
+    week_dates = [monday + timedelta(days=i) for i in range(6)]  # 월~토
+
+    daily_records = (
+        db.query(DailyAnalytics)
+        .filter(DailyAnalytics.date.in_(week_dates))
+        .all()
+    )
+    daily_map = {r.date: r for r in daily_records}
+    weekly_scans = [
+        (daily_map[d].total_scans if d in daily_map else 0)
+        for d in week_dates
+    ]
+
+    # ── 오류 비율 / AI 성공률 (AnalyticsTotal - 전체 누적) ─────────────────
+    total_row = db.query(AnalyticsTotal).filter(AnalyticsTotal.id == 1).first()
+
+    if total_row and total_row.total_scans:
+        misplaced = total_row.misplaced_count or 0
+        unknown   = total_row.unknown_count or 0
+        total     = total_row.total_scans
+        # AI 성공률: 탐지된 책 중 인식 실패(UNKNOWN)를 제외한 비율
+        ai_success_rate = round((total - unknown) / total * 100)
+    else:
+        misplaced = unknown = 0
+        ai_success_rate = 0
+
     return {
-        "weekly_scans": weekly_data,
-        "error_ratios": error_types,
-        "ai_success_rate": ai_success
+        "weekly_scans": weekly_scans,
+        "error_ratios": {
+            "MISPLACED": misplaced,
+            "UNKNOWN":   unknown,
+        },
+        "ai_success_rate": ai_success_rate,
     }
