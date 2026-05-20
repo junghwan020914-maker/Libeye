@@ -13,7 +13,7 @@ from service.matcher import hybrid_book_matching_with_jamo, get_top_candidates
 from service.misplacement import detect_misplacements
 
 # 🚨 수정됨: ScanImage 모델 임포트 추가
-from models import ScanSession, ScanResultDetail, BookMaster, ScanImage
+from models import ScanSession, ScanResultDetail, BookMaster, ScanImage, DailyAnalytics, AnalyticsTotal
 
 # --- 앱 초기화 ---
 celery_app = Celery("tasks", broker=CELERY_BROKER_URL, backend=CELERY_RESULT_BACKEND)
@@ -199,19 +199,17 @@ def process_scan_session(session_id: str):
         )
 
         # 7. DB 저장
-        # 7. DB 저장
         print(f"[{session_id}] 7. 결과 저장")
         for idx, result in enumerate(final_results):
             ocr = result.get("raw_ocr_data", {})
 
-            # 🚨 [수정 1] Gemma4 환각 대비: 문자열 슬라이싱 (DB 크기 초과 방지)
             raw_title = ocr.get("title", "")
             if raw_title:
-                raw_title = raw_title[:255]  # 최대 255자까지만 저장
+                raw_title = raw_title[:255]
 
             raw_call_number = ocr.get("call_number", "")
             if raw_call_number:
-                raw_call_number = raw_call_number[:100]  # 최대 100자까지만 저장
+                raw_call_number = raw_call_number[:100]
 
             db.add(
                 ScanResultDetail(
@@ -219,8 +217,8 @@ def process_scan_session(session_id: str):
                     session_id=session_id,
                     source_image_id=result.get("source_image_id"),
                     bounding_box=result["bounding_box"],
-                    raw_ocr_title=raw_title,  # 잘라낸 안전한 텍스트 저장
-                    raw_ocr_call_number=raw_call_number,  # 잘라낸 안전한 텍스트 저장
+                    raw_ocr_title=raw_title,
+                    raw_ocr_call_number=raw_call_number,
                     matched_book_id=result["matched_book_id"],
                     detected_order=idx + 1,
                     status=result["status"],
@@ -229,8 +227,40 @@ def process_scan_session(session_id: str):
                 )
             )
 
+        # 8. ScanSession 집계 컬럼 업데이트
+        # MISSING은 탐지된 책이 아니라 DB에서 추론된 누락이므로 total_books에서 제외
+        total_books = len(final_results)
+        misplaced_count = sum(1 for r in final_results if r["status"] == "MISPLACED")
+        unknown_count = sum(1 for r in final_results if r["status"] == "UNKNOWN")
+
         if session:
             session.status = "COMPLETED"
+            session.total_books = total_books
+            session.misplaced_count = misplaced_count
+            session.unknown_count = unknown_count
+
+        # 9. DailyAnalytics upsert — 날짜별 집계 캐시 갱신 (주간 차트용)
+        from datetime import date as date_type
+        today = date_type.today()
+        daily = db.query(DailyAnalytics).filter(DailyAnalytics.date == today).first()
+        if daily is None:
+            daily = DailyAnalytics(date=today)
+            db.add(daily)
+        daily.total_scans = (daily.total_scans or 0) + total_books
+        daily.misplaced_count = (daily.misplaced_count or 0) + misplaced_count
+        daily.unknown_count = (daily.unknown_count or 0) + unknown_count
+        daily.session_count = (daily.session_count or 0) + 1
+
+        # 10. AnalyticsTotal upsert — 전체 누적 집계 갱신 (오류비율/AI성공률용)
+        total_row = db.query(AnalyticsTotal).filter(AnalyticsTotal.id == 1).first()
+        if total_row is None:
+            total_row = AnalyticsTotal(id=1)
+            db.add(total_row)
+        total_row.total_scans = (total_row.total_scans or 0) + total_books
+        total_row.misplaced_count = (total_row.misplaced_count or 0) + misplaced_count
+        total_row.unknown_count = (total_row.unknown_count or 0) + unknown_count
+        total_row.session_count = (total_row.session_count or 0) + 1
+
         db.commit()
 
         print(f"[{session_id}] 파이프라인 완료")
