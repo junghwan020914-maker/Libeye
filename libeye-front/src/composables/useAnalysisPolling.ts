@@ -20,9 +20,9 @@ export function useAnalysisPolling(sessionId: Ref<string | null>) {
     refetchInterval: (query) => {
       const currentStatus = query.state.data?.status?.toUpperCase();
       
-      // 상태가 완료, 성공, 에러 중 하나면 폴링을 멈춥니다.
-      if (currentStatus === 'COMPLETED' || currentStatus === 'SUCCESS' || currentStatus === 'ERROR' || currentStatus === 'FAILED') {
-        return false; 
+      // 상태가 완료 또는 실패면 폴링을 멈춥니다.
+      if (currentStatus === 'COMPLETED' || currentStatus === 'FAILED') {
+        return false;
       }
       return 2000; // 그 외(PENDING 등)에는 2초마다 다시 요청
     },
