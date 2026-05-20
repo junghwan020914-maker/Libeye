@@ -34,13 +34,17 @@ CREATE TABLE Book_Master (
 
 -- 3.1 스캔 세션 로그 테이블 (Scan_Session)
 CREATE TABLE Scan_Session (
-    session_id VARCHAR(50) PRIMARY KEY, 
+    session_id VARCHAR(50) PRIMARY KEY,
     location_id VARCHAR(50) REFERENCES Library_Master(location_id),
     scan_time TIMESTAMP DEFAULT NOW(),
     -- 🚨 수정됨: image_url 및 is_image_deleted 컬럼 삭제
     status VARCHAR(20) DEFAULT 'PENDING',
     lux_level INT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    -- 세션 완료 시 파이프라인이 채워주는 집계 컬럼
+    total_books INT DEFAULT 0,               -- YOLO가 탐지한 총 책 권수
+    misplaced_count INT DEFAULT 0,           -- 오배열 책 수 (MISPLACED)
+    unknown_count INT DEFAULT 0              -- 인식 실패 수 (UNKNOWN)
 );
 
 -- 🚨 3.2 [신규 추가] 스캔 이미지 조각 테이블 (Scan_Image)
@@ -54,23 +58,23 @@ CREATE TABLE Scan_Image (
 
 -- 3.3 AI 인식 상세 결과 테이블 (Scan_Result_Detail)
 CREATE TABLE Scan_Result_Detail (
-    detection_id VARCHAR(50) PRIMARY KEY, 
+    detection_id VARCHAR(50) PRIMARY KEY,
     session_id VARCHAR(50) REFERENCES Scan_Session(session_id) ON DELETE CASCADE,
     -- 🚨 수정됨: source_image_id 추가 및 외래키 설정
-    source_image_id VARCHAR(50) REFERENCES Scan_Image(image_id) ON DELETE SET NULL, 
-    matched_book_id VARCHAR(50) REFERENCES Book_Master(book_id), 
-    
+    source_image_id VARCHAR(50) REFERENCES Scan_Image(image_id) ON DELETE SET NULL,
+    matched_book_id VARCHAR(50) REFERENCES Book_Master(book_id),
+
     raw_ocr_title VARCHAR(255),
     raw_ocr_call_number VARCHAR(100),
     crop_image_url VARCHAR(255),
-    
+
     confidence DECIMAL(5,2),
-    bounding_box JSONB, 
+    bounding_box JSONB,
     detected_order INT NOT NULL,
-    status VARCHAR(20) NOT NULL 
+    status VARCHAR(20) NOT NULL
 );
 
--- 3.3 수동 수정 이력 테이블 (Manual_Correction)
+-- 3.4 수동 수정 이력 테이블 (Manual_Correction)
 CREATE TABLE Manual_Correction (
     correction_id VARCHAR(50) PRIMARY KEY DEFAULT VARCHAR(50),
     detection_id VARCHAR(50) REFERENCES Scan_Result_Detail(detection_id),
@@ -80,15 +84,41 @@ CREATE TABLE Manual_Correction (
     action_type VARCHAR(50) NOT NULL -- TEXT_FIX, BARCODE_MATCH, MERGED, SPLIT
 );
 
--- 4. 성능 최적화를 위한 인덱스(Index) 생성
+-- 4. 분석 집계 테이블 생성
 
--- 4.1 특정 서가의 최근 점검 결과를 빠르게 불러오기 위한 복합 인덱스
+-- 4.1 날짜별 집계 캐시 테이블 (Daily_Analytics) — 주간 차트용
+CREATE TABLE Daily_Analytics (
+    date DATE PRIMARY KEY,
+    total_scans INT DEFAULT 0,               -- 해당 날 총 인식 책 권수
+    misplaced_count INT DEFAULT 0,           -- 오배열 수 (MISPLACED)
+    unknown_count INT DEFAULT 0,             -- 인식 실패 수 (UNKNOWN)
+    session_count INT DEFAULT 0,             -- 완료된 세션 수
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 4.2 전체 누적 집계 테이블 (Analytics_Total) — 오류비율/AI성공률용, 항상 id=1 단일 행
+CREATE TABLE Analytics_Total (
+    id INT PRIMARY KEY DEFAULT 1,
+    total_scans INT DEFAULT 0,               -- 전체 누적 인식 책 권수
+    misplaced_count INT DEFAULT 0,           -- 전체 누적 오배열 수 (MISPLACED)
+    unknown_count INT DEFAULT 0,             -- 전체 누적 인식 실패 수 (UNKNOWN)
+    session_count INT DEFAULT 0,             -- 전체 누적 세션 수
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT analytics_total_single_row CHECK (id = 1) -- 단일 행 강제
+);
+
+-- 초기 행 삽입 (파이프라인이 upsert 기준으로 사용)
+INSERT INTO Analytics_Total (id) VALUES (1);
+
+-- 5. 성능 최적화를 위한 인덱스(Index) 생성
+
+-- 5.1 특정 서가의 최근 점검 결과를 빠르게 불러오기 위한 복합 인덱스
 CREATE INDEX idx_scan_session_loc_time ON Scan_Session (location_id, scan_time DESC);
 
--- 4.2 대시보드의 '조치 필요(오류)' 리스트 렌더링 속도 최적화용 복합 인덱스
+-- 5.2 대시보드의 '조치 필요(오류)' 리스트 렌더링 속도 최적화용 복합 인덱스
 CREATE INDEX idx_scan_result_session_status ON Scan_Result_Detail (session_id, status);
 
--- 4.3 청구기호 LIKE 및 유사도 검색 속도 극대화를 위한 GIN Trigram 인덱스
+-- 5.3 청구기호 LIKE 및 유사도 검색 속도 극대화를 위한 GIN Trigram 인덱스
 CREATE INDEX idx_book_master_call_num_trgm ON Book_Master USING gin (call_number gin_trgm_ops);
 
 -- (선택) 상태값 기준 조회가 빈번할 경우를 대비한 기본 인덱스
