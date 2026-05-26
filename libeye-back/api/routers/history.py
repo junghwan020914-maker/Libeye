@@ -1,14 +1,24 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 from database import get_db
 from models import ScanSession, ScanResultDetail
+from typing import Optional
 
 router = APIRouter(prefix="/api/v1/sessions/history", tags=["History"])
 
 @router.get("")
-def get_history(db: Session = Depends(get_db)):
-    sessions = db.query(ScanSession).order_by(desc(ScanSession.created_at)).limit(50).all()
+def get_history(location_id: Optional[str] = None, db: Session = Depends(get_db)):
+    # 기본 쿼리 생성
+    query = db.query(ScanSession)
+    
+    # location_id가 전달된 경우 필터링 추가
+    if location_id:
+        query = query.filter(ScanSession.location_id == location_id)
+        
+    # 정렬 및 50개 제한
+    sessions = query.order_by(desc(ScanSession.created_at)).limit(50).all()
+    
     history = []
     for session in sessions:
         results = db.query(ScanResultDetail).filter(ScanResultDetail.session_id == session.session_id).all()

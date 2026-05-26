@@ -1,14 +1,19 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router'; // useRoute 추가
 import { getHistory } from '../api/sessionAPI';
 
 const router = useRouter();
+const route = useRoute(); // route 객체 초기화
 const historyList = ref<any[]>([]);
 
 onMounted(async () => {
   try {
-    historyList.value = await getHistory();
+    // URL에서 ?locationId= 값을 가져옵니다.
+    const locationId = route.query.locationId as string;
+    
+    // 가져온 locationId를 API 함수에 전달합니다.
+    historyList.value = await getHistory(locationId);
   } catch (err) {
     console.error(err);
   }

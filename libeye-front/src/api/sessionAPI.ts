@@ -30,8 +30,10 @@ export const getLocations = async () => {
   return response.data;
 };
 
-export const getHistory = async () => {
-  const response = await api.get('/v1/sessions/history');
+// 🚨 수정됨: locationId를 선택적 인자로 받고, params로 전달
+export const getHistory = async (locationId?: string) => {
+  const params = locationId ? { location_id: locationId } : {};
+  const response = await api.get('/v1/sessions/history', { params });
   return response.data;
 };
 
