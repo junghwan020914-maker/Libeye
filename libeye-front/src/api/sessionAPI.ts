@@ -46,3 +46,14 @@ export const getAnalytics = async () => {
   const response = await api.get('/v1/analytics/dashboard');
   return response.data;
 };
+
+// 🚀 추가됨: 도서 검색 API 호출 함수
+export const searchBooks = async (query: string) => {
+  if (!query) return { results: [] };
+  
+  // 백엔드의 /api/v1/search/books?q={query} 엔드포인트 호출
+  const response = await api.get('/v1/search/books', {
+    params: { q: query }
+  });
+  return response.data;
+};

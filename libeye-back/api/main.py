@@ -12,7 +12,7 @@ from database import get_db, engine, Base
 import models
 from seed import seed_database
 from contextlib import asynccontextmanager
-from routers import results, image_proxy, locations, history, map, analytics
+from routers import results, image_proxy, locations, history, map, analytics, search
 
 # --- Celery 워커 연결 설정 ---
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
@@ -60,6 +60,7 @@ app.include_router(locations.router)
 app.include_router(history.router)
 app.include_router(map.router)
 app.include_router(analytics.router)
+app.include_router(search.router) 
 
 # --- [수정됨] 단일 Base64 -> 다중 파일(Multipart Form) 업로드 처리로 변경 ---
 @app.post("/api/v1/sessions")
