@@ -56,22 +56,31 @@ onMounted(() => {
     </header>
 
     <div class="flex-1 overflow-y-auto no-scrollbar p-5 flex flex-col gap-6">
-      <div class="flex gap-3">
-        <button @click="router.push('/camera')" class="flex-[2] bg-stone-800 text-white p-4 rounded-2xl shadow-lg flex flex-col items-start justify-center gap-1 active:scale-[0.98] transition-transform overflow-hidden relative">
-          <div class="absolute -right-4 -top-4 text-6xl opacity-20">📸</div>
-          <span class="font-bold text-lg relative z-10">새 서가 점검</span>
-          <span class="text-[10px] text-white/70 relative z-10">터치하여 카메라 실행</span>
-        </button>
-        <button @click="router.push('/guide')" class="flex-1 bg-white border border-stone-200 text-stone-800 p-4 rounded-2xl shadow-sm flex flex-col items-center justify-center gap-1 active:scale-[0.98] transition-transform">
-          <span class="text-2xl">💡</span>
-          <span class="font-bold text-xs mt-1">촬영 가이드</span>
+      
+      <div class="flex flex-col gap-3">
+        <div class="flex gap-3">
+          <button @click="router.push('/camera')" class="flex-[2] bg-stone-800 text-white p-4 rounded-2xl shadow-lg flex flex-col items-start justify-center gap-1 active:scale-[0.98] transition-transform overflow-hidden relative">
+            <div class="absolute -right-4 -top-4 text-6xl opacity-20">📸</div>
+            <span class="font-bold text-lg relative z-10">새 서가 점검</span>
+            <span class="text-[10px] text-white/70 relative z-10">터치하여 카메라 실행</span>
+          </button>
+          <button @click="router.push('/guide')" class="flex-1 bg-white border border-stone-200 text-stone-800 p-4 rounded-2xl shadow-sm flex flex-col items-center justify-center gap-1 active:scale-[0.98] transition-transform">
+            <span class="text-2xl">💡</span>
+            <span class="font-bold text-xs mt-1">촬영 가이드</span>
+          </button>
+        </div>
+
+        <button @click="router.push('/cart-scan')" class="w-full bg-blue-50 border border-blue-100 p-4 rounded-2xl shadow-sm flex items-center justify-between active:scale-[0.98] transition-transform">
+          <div class="flex items-center gap-3">
+            <div class="text-2xl bg-white text-blue-600 w-10 h-10 flex items-center justify-center rounded-xl shadow-sm">🛒</div>
+            <div class="text-left">
+              <div class="font-bold text-blue-900 text-sm">북카트 정리 도우미</div>
+              <div class="text-xs text-blue-700 mt-0.5">도서 배치 최적 동선 안내</div>
+            </div>
+          </div>
+          <div class="text-blue-500 font-bold">➔</div>
         </button>
       </div>
-      
-      <div class="dashboard-container p-6">
-   	 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
-     		 <CartServiceCard />
- 	 </div>
      </div>
 
       <section class="flex flex-col gap-3 mt-2">
