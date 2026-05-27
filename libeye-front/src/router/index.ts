@@ -7,6 +7,8 @@ import DetailView from '../views/DetailView.vue'
 import MapView from '../views/MapView.vue'
 import AnalyticsView from '../views/AnalyticsView.vue'
 import GuideView from '../views/GuideView.vue'
+import CartScanView from '../views/CartScanView.vue'
+import CartResultView from '../views/CartResultView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -50,7 +52,7 @@ const router = createRouter({
       path: '/guide',
       name: 'guide',
       component: GuideView
-    }
+    },
     // 신규 북카트 라우트 추가
     {
       path: '/cart-scan',

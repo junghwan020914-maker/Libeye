@@ -1,4 +1,4 @@
-import axios from './axios'; // 기존 설정된 axios 인스턴스 사용
+import axios from 'axios'; // 기존 설정된 axios 인스턴스 사용
 
 export const cartAPI = {
   // 북카트 이미지 업로드 및 분석 요청

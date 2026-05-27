@@ -14,6 +14,7 @@ from service.misplacement import detect_misplacements
 
 # 🚨 수정됨: ScanImage 모델 임포트 추가
 from models import ScanSession, ScanResultDetail, BookMaster, ScanImage, DailyAnalytics, AnalyticsTotal
+import cart_pipeline
 
 # --- 앱 초기화 ---
 celery_app = Celery("tasks", broker=CELERY_BROKER_URL, backend=CELERY_RESULT_BACKEND)

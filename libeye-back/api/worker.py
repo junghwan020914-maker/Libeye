@@ -29,3 +29,8 @@ def process_scan_session(self, session_id: str):
     (API 서버에서는 껍데기만 호출하고, 실제 처리는 AI 워커 노드에서 담당)
     """
     pass
+    
+    # 👇 [신규 추가] 북카트 처리를 위해 AI 워커로 전달할 Task (API용 껍데기)
+@celery_app.task(bind=True, name="process_cart_task")
+def process_cart_task(self, session_id: int, image_path: str):
+    pass

@@ -1,43 +1,57 @@
-from fastapi import APIRouter, Depends, UploadFile, File, BackgroundTasks, HTTPException
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from sqlalchemy.orm import Session
 import uuid
 import os
-from ..database import get_db
-from ..models_cart import CartSession, CartItem
+import boto3
+
+from database import get_db
+from models_cart import CartSession, CartItem
+from worker import celery_app
 
 router = APIRouter(prefix="/api/cart", tags=["Cart Sorting"])
 
-UPLOAD_DIR = "static/cart_images"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
+# MinIO 설정 (main.py의 설정과 동일하게 구성)
+MINIO_URL = os.getenv("MINIO_URL", "http://minio:9000")
+s3_client = boto3.client(
+    's3',
+    endpoint_url=MINIO_URL,
+    aws_access_key_id="admin",
+    aws_secret_access_key="admin1234"
+)
 
 @router.post("/upload", status_code=201)
 async def upload_cart_image(
-    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
-    # 1. 고유 파일명 생성 및 이미지 저장
+    # 1. 파일명 생성
     file_ext = file.filename.split(".")[-1] if "." in file.filename else "jpg"
-    file_name = f"{uuid.uuid4()}.{file_ext}"
-    file_path = os.path.join(UPLOAD_DIR, file_name)
+    file_name = f"cart-{uuid.uuid4().hex[:8]}.{file_ext}"
     
     try:
-        with open(file_path, "wb") as f:
-            content = await file.read()
-            f.write(content)
+        # 2. MinIO 'original-bucket'에 이미지 업로드
+        content = await file.read()
+        s3_client.put_object(
+            Bucket='original-bucket',
+            Key=file_name,
+            Body=content,
+            ContentType=file.content_type
+        )
+        # MinIO 내부 접근 URL
+        image_url = f"{MINIO_URL}/original-bucket/{file_name}"
+        
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"File write failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"MinIO upload failed: {str(e)}")
 
-    # 2. 북카트 세션 레코드 생성 (초기 상태: PENDING)
-    session = CartSession(image_path=file_path, status="PENDING")
+    # 3. DB 저장 (image_path 컬럼에 로컬 경로 대신 MinIO URL 저장)
+    session = CartSession(image_path=image_url, status="PENDING")
     db.add(session)
     db.commit()
     db.refresh(session)
     
-    # 3. AI 백그라운드 워커 파이프라인 트리거
-    # (Celery 환경일 경우 .delay() 형태로 변환 가능, 여기서는 프로젝트 기본 구조에 맞춰 구성)
-    from ai_worker.cart_pipeline import process_cart_job
-    background_tasks.add_task(process_cart_job, session.id, file_path)
+    # 4. Celery Worker로 작업 전송 (image_url을 워커로 전달)
+    print(f"[Cart] AI 워커에 북카트(Session {session.id}) 분석 요청 전송 중...")
+    celery_app.send_task('process_cart_task', args=[session.id, image_url])
     
     return {"session_id": session.id, "status": session.status}
 
@@ -47,9 +61,10 @@ def get_cart_sorting_result(session_id: int, db: Session = Depends(get_db)):
     if not session:
         raise HTTPException(status_code=404, detail="Cart session not found")
         
-    # 정렬 순서(display_order)에 맞추어 도서 반환
     items = db.query(CartItem).filter(CartItem.session_id == session_id).order_by(CartItem.display_order).all()
     
+    # 이미지 URL을 프록시 경로로 변환 (기존 results.py와 유사한 방식 적용 가능)
+    # 필요에 따라 프론트엔드가 이미지 표출 시 사용
     return {
         "session_id": session.id,
         "status": session.status,

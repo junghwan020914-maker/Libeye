@@ -3,6 +3,8 @@ import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 // 🚨 추가됨: API 호출 함수 임포트
 import { searchBooks } from '../api/sessionAPI';
+// 1. 신규 북카트 서비스 카드 컴포넌트 임포트
+import CartServiceCard from '../components/dashboard/CartServiceCard.vue';
 
 const router = useRouter();
 
@@ -65,6 +67,12 @@ onMounted(() => {
           <span class="font-bold text-xs mt-1">촬영 가이드</span>
         </button>
       </div>
+      
+      <div class="dashboard-container p-6">
+   	 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
+     		 <CartServiceCard />
+ 	 </div>
+     </div>
 
       <section class="flex flex-col gap-3 mt-2">
         <h3 class="font-bold text-stone-800 text-sm flex items-center justify-between">
