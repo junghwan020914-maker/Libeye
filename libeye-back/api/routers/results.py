@@ -117,10 +117,20 @@ async def get_scan_results(session_id: str, db: Session = Depends(get_db)):
             "confidence": r.confidence
         })
     
+    location_warning = (
+        {
+            "selected_location_id": session_info.location_id,
+            "actual_location_id": session_info.inferred_location_id,
+        }
+        if session_info.inferred_location_id
+        else None
+    )
+
     return {
         "session_id": session_id,
         "status": session_info.status,
-        "location_id": session_info.location_id, # 🚨 추가됨: 완료 상태일 때 위치 정보 반환
+        "location_id": session_info.location_id,
+        "location_warning": location_warning,
         # 🚨 수정: 기존 "image_url" 단일 키 대신, "images" 배열로 반환
         "images": image_list,
         "expected_books": expected_books, # 🚨 [추가됨] 원본 도서 목록 반환

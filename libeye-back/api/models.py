@@ -45,7 +45,8 @@ class ScanSession(Base):
     # 세션 완료 시 파이프라인이 채워주는 집계 컬럼
     total_books = Column(Integer, default=0)               # YOLO가 탐지한 총 책 권수
     misplaced_count = Column(Integer, default=0)           # 오배열 책 수 (MISPLACED)
-    unknown_count = Column(Integer, default=0) # 인식 실패 수 (UNKNOWN)
+    unknown_count = Column(Integer, default=0)             # 인식 실패 수 (UNKNOWN)
+    inferred_location_id = Column(String(50), nullable=True)  # 책 다수결로 추론된 실제 서가 ID
 
     # 🚨 수정: 세션 삭제 시 연관된 스캔 이미지와 결과 데이터가 모두 삭제되도록 cascade 설정
     images = relationship("ScanImage", back_populates="session", cascade="all, delete-orphan")

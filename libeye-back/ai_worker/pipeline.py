@@ -201,7 +201,7 @@ def process_scan_session(session_id: str):
         # 6. 병합된 전체 리스트를 통해 오배열 판별
         # location_id가 없으면 detect_misplacements 내부에서 다수결로 추론
         print(f"[{session_id}] 6. 오배열 판별 (총 {len(global_results)}권 병합됨)")
-        final_results, resolved_loc = detect_misplacements(
+        final_results, resolved_loc, inferred_loc = detect_misplacements(
             global_results, session.location_id if session else None
         )
 
@@ -209,6 +209,11 @@ def process_scan_session(session_id: str):
         if session and not session.location_id and resolved_loc:
             session.location_id = resolved_loc
             print(f"[{session_id}] location_id 추론 완료: {resolved_loc}")
+
+        # 선택한 서가와 실제 책들의 서가가 다른 경우 기록
+        if session and inferred_loc:
+            session.inferred_location_id = inferred_loc
+            print(f"[{session_id}] 서가 불일치 감지: 선택={session.location_id}, 실제={inferred_loc}")
 
         # 7. DB 저장
         print(f"[{session_id}] 7. 결과 저장")

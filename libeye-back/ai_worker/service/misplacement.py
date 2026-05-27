@@ -5,7 +5,7 @@ from typing import Optional
 def detect_misplacements(
     books: list[dict],
     location_id: Optional[str] = None,
-) -> tuple[list[dict], Optional[str]]:
+) -> tuple[list[dict], Optional[str], Optional[str]]:
     """
     1차 필터: 책장 기반 오배열 검사
     2차 필터: expected_order 기반 LIS 순서 검사
@@ -15,19 +15,27 @@ def detect_misplacements(
     location_id : 세션의 서가 ID
                   - 있으면 해당 서가 기준으로 1차 필터
                   - 없으면 매칭된 책들의 다수결로 현재 서가 추론
+
+    반환값: (books, resolved_loc, inferred_loc)
+      inferred_loc : location_id가 주어졌으나 다수결 추론 결과와 다를 때 추론된 서가 ID,
+                     일치하거나 location_id가 없었으면 None
     """
     if not books:
-        return books, location_id
+        return books, location_id, None
 
     # ── 1차 필터: 책장 기반 ──────────────────────────────────────────────
 
-    current_loc = _resolve_location(books, location_id)
+    inferred = _majority_location(books)
+    current_loc = location_id if location_id else inferred
+
+    # 제공된 location_id와 다수결 추론이 다를 때만 경고용으로 전달
+    inferred_loc = inferred if (location_id and inferred and inferred != location_id) else None
 
     if current_loc is None:
         # 매칭된 책이 하나도 없어 서가를 알 수 없음 → 전부 UNKNOWN
         for book in books:
             book["status"] = "UNKNOWN"
-        return books, None
+        return books, None, None
 
     for book in books:
         if not _is_matched(book):
@@ -49,23 +57,16 @@ def detect_misplacements(
             books[orig_idx]["status"] = "MATCH" if ci in correct_candidate_indices else "MISPLACED"
 
     _log(books, current_loc)
-    return books, current_loc
+    return books, current_loc, inferred_loc
 
 
 # ── 내부 헬퍼 ────────────────────────────────────────────────────────────
 
-def _resolve_location(books: list[dict], location_id: Optional[str]) -> Optional[str]:
-    """
-    현재 서가를 결정한다.
-    location_id가 주어지면 그대로 사용, 없으면 매칭된 책들의 다수결로 추론.
-    """
-    if location_id:
-        return location_id
-
+def _majority_location(books: list[dict]) -> Optional[str]:
+    """매칭된 책들의 assigned_loc_id 다수결로 서가를 추론한다."""
     matched_locs = [b["assigned_loc_id"] for b in books if _is_matched(b)]
     if not matched_locs:
         return None
-
     return Counter(matched_locs).most_common(1)[0][0]
 
 
