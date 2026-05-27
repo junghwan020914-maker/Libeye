@@ -197,10 +197,18 @@ def process_scan_session(session_id: str):
 
         # 6. 병합된 전체 리스트를 통해 오배열 판별
         # (이미 sequence_order 순서대로 병합되면서 물리적 순서가 완성된 상태)
+
+        # 6. 병합된 전체 리스트를 통해 오배열 판별
+        # location_id가 없으면 detect_misplacements 내부에서 다수결로 추론
         print(f"[{session_id}] 6. 오배열 판별 (총 {len(global_results)}권 병합됨)")
-        final_results = detect_misplacements(
+        final_results, resolved_loc = detect_misplacements(
             global_results, session.location_id if session else None
         )
+
+        # location_id가 없었던 경우 추론된 값을 세션에 저장
+        if session and not session.location_id and resolved_loc:
+            session.location_id = resolved_loc
+            print(f"[{session_id}] location_id 추론 완료: {resolved_loc}")
 
         # 7. DB 저장
         print(f"[{session_id}] 7. 결과 저장")

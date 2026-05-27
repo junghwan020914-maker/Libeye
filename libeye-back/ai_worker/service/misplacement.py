@@ -5,7 +5,7 @@ from typing import Optional
 def detect_misplacements(
     books: list[dict],
     location_id: Optional[str] = None,
-) -> list[dict]:
+) -> tuple[list[dict], Optional[str]]:
     """
     1차 필터: 책장 기반 오배열 검사
     2차 필터: expected_order 기반 LIS 순서 검사
@@ -17,7 +17,7 @@ def detect_misplacements(
                   - 없으면 매칭된 책들의 다수결로 현재 서가 추론
     """
     if not books:
-        return books
+        return books, location_id
 
     # ── 1차 필터: 책장 기반 ──────────────────────────────────────────────
 
@@ -27,7 +27,7 @@ def detect_misplacements(
         # 매칭된 책이 하나도 없어 서가를 알 수 없음 → 전부 UNKNOWN
         for book in books:
             book["status"] = "UNKNOWN"
-        return books
+        return books, None
 
     for book in books:
         if not _is_matched(book):
@@ -49,7 +49,7 @@ def detect_misplacements(
             books[orig_idx]["status"] = "MATCH" if ci in correct_candidate_indices else "MISPLACED"
 
     _log(books, current_loc)
-    return books
+    return books, current_loc
 
 
 # ── 내부 헬퍼 ────────────────────────────────────────────────────────────

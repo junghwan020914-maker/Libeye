@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Depends, HTTPException, File, UploadFile, Form
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 import uuid
 import os
 from celery import Celery 
@@ -66,7 +66,7 @@ app.include_router(cart.router)  # 신규 북카트 라우터 추가
 # --- [수정됨] 단일 Base64 -> 다중 파일(Multipart Form) 업로드 처리로 변경 ---
 @app.post("/api/v1/sessions")
 async def create_session(
-    location_id: str = Form(...), 
+    location_id: Optional[str] = Form(None),
     files: List[UploadFile] = File(...), 
     db: Session = Depends(get_db)
 ):
