@@ -280,6 +280,26 @@ const selectCandidate = (book: any) => {
     searchResults.value = [];
 };
 
+// 책이 아닌 객체(False Positive) 무시 및 삭제 로직
+const ignoreDetection = async () => {
+    if (!selectedBook.value) return;
+    const rawData = selectedBook.value._raw_detection;
+
+    // 사용자의 실수를 방지하기 위한 확인창
+    if (!confirm('이 항목을 책이 아닌 것으로 간주하고 목록에서 완전히 삭제하시겠습니까?')) return;
+
+    try {
+        await fetch(`/api/v1/sessions/${sessionId.value}/detections/${rawData.detection_id}`, {
+            method: 'DELETE'
+        });
+        selectedBook.value = null;
+        window.location.reload(); // 성공 시 화면 새로고침하여 바뀐 결과 동기화
+    } catch (e) {
+        alert('탐지 결과 삭제 중 오류가 발생했습니다.');
+    }
+};
+
+
 </script>
 
 <template>
@@ -604,9 +624,14 @@ const selectCandidate = (book: any) => {
                             ✏️ 인식을 잘못했나요? 수동 교정하기
                         </button>
 
+                        <button @click="ignoreDetection" type="button"
+                            class="w-full bg-red-50 text-red-600 hover:text-red-700 border border-red-200 font-bold py-2 rounded-xl text-[11px] transition-colors flex items-center justify-center gap-1">
+                            🗑️ 책이 아님 (탐지 결과 삭제)
+                        </button>
+
                         <button @click="selectedBook = null"
                             class="w-full bg-stone-800 text-white font-bold py-3 rounded-xl text-xs hover:bg-stone-700 transition-colors shadow-md">
-                            {{ selectedBook.status === 'MISPLACED' && !selectedBook._raw_detection?.is_verified ? '다음에 하기(닫기)' : '닫기' }}
+                            {{ selectedBook.status === 'MISPLACED' && !selectedBook._raw_detection?.is_verified ? '다음에 하기 (닫기)' : '닫기' }}
                         </button>
                     </div>
 

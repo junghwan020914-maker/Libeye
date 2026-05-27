@@ -188,3 +188,63 @@ def verify_misplacement(session_id: str, detection_id: str, db: Session = Depend
     det.is_verified = True
     db.commit()
     return {"message": "Verification completed"}
+
+# libeye-back/api/routers/results.py 파일 하단에 추가
+
+@router.delete("/{session_id}/detections/{detection_id}")
+def delete_false_detection(session_id: str, detection_id: str, db: Session = Depends(get_db)):
+    """YOLO가 잘못 탐지한 이미지(책이 아닌 객체)를 삭제하고 서가 배열 상태를 재계산합니다."""
+    
+    det = db.query(ScanResultDetail).filter_by(session_id=session_id, detection_id=detection_id).first()
+    if not det: 
+        raise HTTPException(status_code=404, detail="Detection not found")
+    
+    # 1. 탐지 결과 DB에서 완전히 삭제
+    db.delete(det)
+    
+    # 2. 오배열 상태 재계산을 위해 세션 업데이트 트리거
+    session = db.query(ScanSession).filter_by(session_id=session_id).first()
+    session.updated_at = func.now()
+    
+    # 3. 남은 도서들을 다시 불러와서 오배열(LIS) 재계산
+    remaining_dets = db.query(ScanResultDetail).filter_by(session_id=session_id).order_by(ScanResultDetail.detected_order).all()
+    
+    valid_seq = []
+    for d in remaining_dets:
+        if d.matched_book_id:
+            b = db.query(BookMaster).filter_by(book_id=d.matched_book_id).first()
+            if b and b.assigned_loc_id == session.location_id:
+                valid_seq.append((d, b.expected_order))
+            else:
+                d.status = 'EXTRA'
+        else:
+            d.status = 'UNKNOWN'
+            
+    if valid_seq:
+        import bisect
+        tails = []
+        parent = {}
+        tail_indices = []
+        
+        for i, (d, exp_order) in enumerate(valid_seq):
+            idx = bisect.bisect_left(tails, exp_order)
+            if idx == len(tails):
+                tails.append(exp_order)
+                tail_indices.append(i)
+            else:
+                tails[idx] = exp_order
+                tail_indices[idx] = i
+            
+            parent[i] = tail_indices[idx - 1] if idx > 0 else -1
+            
+        lis_indices = set()
+        curr = tail_indices[-1] if tail_indices else -1
+        while curr != -1:
+            lis_indices.add(curr)
+            curr = parent[curr]
+            
+        for i, (d, exp_order) in enumerate(valid_seq):
+            d.status = 'MATCH' if i in lis_indices else 'MISPLACED'
+                
+    db.commit()
+    return {"message": "Detection deleted and status recalculated"}
