@@ -48,31 +48,34 @@ onMounted(() => {
 
 <template>
   <main class="flex-col h-full animate-fade-in pb-20 overflow-y-auto flex">
-    <header class="bg-white px-5 py-4 border-b border-stone-200 sticky top-0 z-20 flex justify-between items-center shrink-0">
-      <div>
-        <h2 class="text-lg font-extrabold text-stone-900">김사서님, 환영합니다 👋</h2>
-      </div>
-      <div class="w-10 h-10 rounded-full bg-stone-800 flex items-center justify-center text-white font-bold shadow-sm">김</div>
+    <header class="bg-white px-5 py-4 border-b border-stone-200 sticky top-0 z-20 flex items-center gap-3 shrink-0">
+      <img src="../assets/" alt="LIBEYE Logo" class="w-8 h-8 object-contain" />
+      <h1 class="text-base font-extrabold text-stone-900 tracking-tight">LIBEYE - Library Eye</h1>
     </header>
 
     <div class="flex-1 overflow-y-auto no-scrollbar p-5 flex flex-col gap-6">
-      
+
       <div class="flex flex-col gap-3">
         <div class="flex gap-3">
-          <button @click="router.push('/camera')" class="flex-[2] bg-stone-800 text-white p-4 rounded-2xl shadow-lg flex flex-col items-start justify-center gap-1 active:scale-[0.98] transition-transform overflow-hidden relative">
+          <button @click="router.push('/camera')"
+            class="flex-[2] bg-stone-800 text-white p-4 rounded-2xl shadow-lg flex flex-col items-start justify-center gap-1 active:scale-[0.98] transition-transform overflow-hidden relative">
             <div class="absolute -right-4 -top-4 text-6xl opacity-20">📸</div>
             <span class="font-bold text-lg relative z-10">새 서가 점검</span>
             <span class="text-[10px] text-white/70 relative z-10">터치하여 카메라 실행</span>
           </button>
-          <button @click="router.push('/guide')" class="flex-1 bg-white border border-stone-200 text-stone-800 p-4 rounded-2xl shadow-sm flex flex-col items-center justify-center gap-1 active:scale-[0.98] transition-transform">
+          <button @click="router.push('/guide')"
+            class="flex-1 bg-white border border-stone-200 text-stone-800 p-4 rounded-2xl shadow-sm flex flex-col items-center justify-center gap-1 active:scale-[0.98] transition-transform">
             <span class="text-2xl">💡</span>
             <span class="font-bold text-xs mt-1">촬영 가이드</span>
           </button>
         </div>
 
-        <button @click="router.push('/cart-scan')" class="w-full bg-blue-50 border border-blue-100 p-4 rounded-2xl shadow-sm flex items-center justify-between active:scale-[0.98] transition-transform">
+        <button @click="router.push('/cart-scan')"
+          class="w-full bg-blue-50 border border-blue-100 p-4 rounded-2xl shadow-sm flex items-center justify-between active:scale-[0.98] transition-transform">
           <div class="flex items-center gap-3">
-            <div class="text-2xl bg-white text-blue-600 w-10 h-10 flex items-center justify-center rounded-xl shadow-sm">🛒</div>
+            <div
+              class="text-2xl bg-white text-blue-600 w-10 h-10 flex items-center justify-center rounded-xl shadow-sm">🛒
+            </div>
             <div class="text-left">
               <div class="font-bold text-blue-900 text-sm">북카트 정리 도우미</div>
               <div class="text-xs text-blue-700 mt-0.5">도서 배치 최적 동선 안내</div>
@@ -80,60 +83,48 @@ onMounted(() => {
           </div>
           <div class="text-blue-500 font-bold">➔</div>
         </button>
-     </div>
+      </div>
 
       <section class="flex flex-col gap-3 mt-2">
         <h3 class="font-bold text-stone-800 text-sm flex items-center justify-between">
           <span>도서 위치 추적</span>
           <span v-if="isSearching" class="text-xs text-stone-500 animate-pulse">검색 중...</span>
         </h3>
-        
+
         <div class="relative">
-          <input 
-            v-model="searchQuery" 
-            @keyup.enter="performSearch"
-            type="text" 
-            placeholder="도서명 또는 청구기호 검색" 
-            class="w-full bg-white border border-stone-200 rounded-xl p-3 pl-10 pr-10 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-stone-800 transition-all"
-          />
-          <button @click="performSearch" class="absolute left-3 top-3 text-stone-400 hover:text-stone-700 transition-colors">
+          <input v-model="searchQuery" @keyup.enter="performSearch" type="text" placeholder="도서명 또는 청구기호 검색"
+            class="w-full bg-white border border-stone-200 rounded-xl p-3 pl-10 pr-10 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-stone-800 transition-all" />
+          <button @click="performSearch"
+            class="absolute left-3 top-3 text-stone-400 hover:text-stone-700 transition-colors">
             🔍
           </button>
-          
-          <button 
-            v-if="searchQuery || hasSearched" 
-            @click="clearSearch" 
-            class="absolute right-3 top-3 text-stone-400 hover:text-stone-700 transition-colors w-6 h-6 flex items-center justify-center rounded-full hover:bg-stone-100"
-          >
+
+          <button v-if="searchQuery || hasSearched" @click="clearSearch"
+            class="absolute right-3 top-3 text-stone-400 hover:text-stone-700 transition-colors w-6 h-6 flex items-center justify-center rounded-full hover:bg-stone-100">
             ✕
           </button>
         </div>
 
         <div v-if="searchResults.length > 0" class="flex flex-col gap-3 mt-2 pb-4">
-          <div 
-            v-for="book in searchResults" 
-            :key="book.book_id"
-            class="bg-white p-4 rounded-xl border border-stone-200 shadow-sm flex flex-col gap-2 transition-all hover:border-stone-300"
-          >
+          <div v-for="book in searchResults" :key="book.book_id"
+            class="bg-white p-4 rounded-xl border border-stone-200 shadow-sm flex flex-col gap-2 transition-all hover:border-stone-300">
             <div>
               <div class="font-bold text-stone-800 text-sm break-keep">{{ book.title }}</div>
               <div class="text-xs text-stone-500 mt-1">청구기호: {{ book.call_number }}</div>
             </div>
-            
+
             <div class="flex flex-col gap-1 mt-2 pt-2 border-t border-stone-100 text-xs">
               <div class="flex justify-between items-center">
                 <span class="text-stone-500">원래 위치:</span>
-                <span class="font-semibold text-stone-800 bg-stone-100 px-2 py-1 rounded">{{ book.assigned_location || '미지정' }}</span>
+                <span class="font-semibold text-stone-800 bg-stone-100 px-2 py-1 rounded">{{ book.assigned_location ||
+                  '미지정' }}</span>
               </div>
               <div class="flex justify-between items-center">
                 <span class="text-stone-500">최근 발견 위치:</span>
-                <span 
-                  class="font-semibold px-2 py-1 rounded"
-                  :class="[
-                    !book.last_seen_location ? 'text-stone-400 bg-stone-50' : 
+                <span class="font-semibold px-2 py-1 rounded" :class="[
+                  !book.last_seen_location ? 'text-stone-400 bg-stone-50' :
                     (book.assigned_location !== book.last_seen_location ? 'text-red-600 bg-red-50 border border-red-100' : 'text-emerald-600 bg-emerald-50')
-                  ]"
-                >
+                ]">
                   {{ book.last_seen_location || '스캔 기록 없음' }}
                 </span>
               </div>
@@ -141,7 +132,8 @@ onMounted(() => {
           </div>
         </div>
 
-        <div v-else-if="hasSearched && !isSearching" class="bg-stone-50 border border-stone-200 rounded-xl p-6 text-center mt-2">
+        <div v-else-if="hasSearched && !isSearching"
+          class="bg-stone-50 border border-stone-200 rounded-xl p-6 text-center mt-2">
           <div class="text-2xl mb-2">📚</div>
           <div class="text-stone-600 text-sm font-medium">검색 결과가 없습니다.</div>
           <div class="text-stone-400 text-xs mt-1">다른 검색어를 입력해 보세요.</div>
@@ -153,6 +145,12 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.no-scrollbar::-webkit-scrollbar { display: none; }
-.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
 </style>
