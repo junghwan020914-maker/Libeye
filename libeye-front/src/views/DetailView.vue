@@ -103,24 +103,41 @@ const onImageLoad = (event: Event, imageId: string) => {
     };
 };
 
-// --- [추가된 핵심 로직] YOLO 좌표를 CSS 픽셀로 변환 ---
-const getBoxStyle = (detection: any, imageId: string) => {
+// --- [추가된 핵심 로직] YOLO polygon 좌표를 SVG points 문자열로 변환 ---
+const getPolygonPoints = (detection: any, imageId: string): string => {
     const dim = imageDimensions.value[imageId];
-
-    // 이미지가 아직 로드되지 않았거나 bounding_box 값이 없으면 렌더링 숨김
-    if (!dim || !detection.bounding_box) return { display: 'none' };
+    if (!dim || !detection.bounding_box) return '';
 
     // DB에서 JSON 문자열로 넘어올 경우를 대비한 안전한 파싱
     const box = typeof detection.bounding_box === 'string'
         ? JSON.parse(detection.bounding_box)
         : detection.bounding_box;
 
+    if (!box.polygon || box.polygon.length === 0) return '';
+
+    return box.polygon
+        .map(([x, y]: [number, number]) =>
+            `${dim.offsetX + x * dim.scaleX},${dim.offsetY + y * dim.scaleY}`)
+        .join(' ');
+};
+
+// polygon의 최상단-좌측 꼭짓점 위치를 반환 (배지 위치 계산용)
+const getPolygonLabelPos = (detection: any, imageId: string): { x: number, y: number } | null => {
+    const dim = imageDimensions.value[imageId];
+    if (!dim || !detection.bounding_box) return null;
+
+    const box = typeof detection.bounding_box === 'string'
+        ? JSON.parse(detection.bounding_box)
+        : detection.bounding_box;
+
+    if (!box.polygon || box.polygon.length === 0) return null;
+
+    const minX = Math.min(...box.polygon.map(([x]: [number, number]) => x));
+    const minY = Math.min(...box.polygon.map(([, y]: [number, number]) => y));
+
     return {
-        position: 'absolute',
-        left: `${dim.offsetX + (box.x * dim.scaleX)}px`,
-        top: `${dim.offsetY + (box.y * dim.scaleY)}px`,
-        width: `${box.w * dim.scaleX}px`,
-        height: `${box.h * dim.scaleY}px`,
+        x: dim.offsetX + minX * dim.scaleX,
+        y: dim.offsetY + minY * dim.scaleY,
     };
 };
 
@@ -230,28 +247,43 @@ const openBookDetail = (item: any) => {
                     <img :src="img.image_url" @load="(e) => onImageLoad(e, img.image_id)"
                         class="absolute inset-0 w-full h-full object-contain opacity-50" />
 
-                    <template v-for="d in sessionData.detections" :key="d.detection_id">
-                        <div v-if="d.source_image_id === img.image_id"
-                            class="ar-box absolute flex justify-center z-10 transition-all hover:scale-105"
-                            :style="getBoxStyle(d, img.image_id)" :class="{
-                                'border-2 border-[#2E7D32] bg-green-500/10': d.status === 'MATCH',
-                                'border-2 border-[#D32F2F] bg-red-500/30 shadow-[0_0_15px_rgba(211,47,47,0.4)]': d.status === 'MISPLACED',
-                                'border-2 border-[#F57C00] bg-orange-500/30': d.status === 'UNKNOWN' || d.status === 'MISSING'
-                            }">
+                    <!-- SVG polygon 오버레이 -->
+                    <svg class="absolute inset-0 w-full h-full pointer-events-none z-10">
+                        <template v-for="d in sessionData.detections" :key="d.detection_id">
+                            <polygon
+                                v-if="d.source_image_id === img.image_id && getPolygonPoints(d, img.image_id)"
+                                :points="getPolygonPoints(d, img.image_id)"
+                                stroke-width="2"
+                                :stroke="d.status === 'MATCH' ? '#2E7D32' : d.status === 'MISPLACED' ? '#D32F2F' : '#F57C00'"
+                                :fill="d.status === 'MATCH' ? 'rgba(34,197,94,0.1)' : d.status === 'MISPLACED' ? 'rgba(211,47,47,0.3)' : 'rgba(245,124,0,0.3)'"
+                            />
+                        </template>
+                    </svg>
 
+                    <!-- 배지 레이어 (순서 번호 + 상태 텍스트) -->
+                    <template v-for="d in sessionData.detections" :key="`badge-${d.detection_id}`">
+                        <template v-if="d.source_image_id === img.image_id && getPolygonLabelPos(d, img.image_id)">
                             <span
-                                class="absolute -top-6 bg-stone-800 text-white text-[10px] w-5 h-5 flex items-center justify-center rounded-full font-bold shadow-md">
+                                class="absolute bg-stone-800 text-white text-[10px] w-5 h-5 flex items-center justify-center rounded-full font-bold shadow-md z-20"
+                                :style="{
+                                    left: `${getPolygonLabelPos(d, img.image_id)!.x}px`,
+                                    top: `${getPolygonLabelPos(d, img.image_id)!.y - 24}px`
+                                }">
                                 {{ d.detected_order }}
                             </span>
                             <span v-if="d.status !== 'MATCH'"
-                                class="absolute -top-5 left-6 bg-white border text-[8px] px-1 rounded whitespace-nowrap"
+                                class="absolute bg-white border text-[8px] px-1 rounded whitespace-nowrap z-20"
+                                :style="{
+                                    left: `${getPolygonLabelPos(d, img.image_id)!.x + 24}px`,
+                                    top: `${getPolygonLabelPos(d, img.image_id)!.y - 20}px`
+                                }"
                                 :class="{
                                     'border-[#D32F2F] text-[#D32F2F]': d.status === 'MISPLACED',
                                     'border-[#F57C00] text-[#F57C00]': d.status === 'UNKNOWN' || d.status === 'MISSING'
                                 }">
                                 {{ d.status === 'MISPLACED' ? '오배열' : '확인요망' }}
                             </span>
-                        </div>
+                        </template>
                     </template>
                 </div>
             </div>
