@@ -305,15 +305,29 @@ const ignoreDetection = async () => {
 };
 
 // 일괄 조치 완료 처리 로직
+// --- [신규 추가] 일괄 조치 완료 처리 로직 ---
 const verifyAllActions = async () => {
-    // 조치 완료되지 않은 항목(오배열인데 is_verified가 false인 항목) 필터링
-    const unverifiedItems = sessionData.value?.detections.filter(
-        (d: any) => d.status === 'MISPLACED' && !d.is_verified
+    if (!sessionData.value) return;
+
+    // 1. 조치 완료되지 않은 탐지 항목 카운트 (오배열 미조치, 외부도서, 미인식)
+    const unverifiedDetections = sessionData.value.detections.filter(
+        (d: any) => (d.status === 'MISPLACED' && !d.is_verified) ||
+            d.status === 'EXTRA' ||
+            d.status === 'UNKNOWN'
+    );
+
+    // 2. 유실/미인식 도서 카운트 (MISSING)
+    const missingBooks = sessionData.value.expected_books?.filter(
+        (expected: any) => !sessionData.value.detections.some(
+            (d: any) => d.matched_book_id === expected.book_id
+        )
     ) || [];
 
-    // 조치되지 않은 항목이 있다면 팝업으로 사용자에게 물어봄
-    if (unverifiedItems.length > 0) {
-        const confirmResult = confirm(`아직 조치되지 않은 사항이 ${unverifiedItems.length}건 있습니다.\n정말 일괄 완료 처리하시겠습니까?`);
+    const totalUnresolved = unverifiedDetections.length + missingBooks.length;
+
+    // 미조치 건수가 1건 이상일 경우 경고 팝업
+    if (totalUnresolved > 0) {
+        const confirmResult = confirm(`아직 조치/확인되지 않은 사항이 총 ${totalUnresolved}건(오배열, 인식오류, 유실 등) 있습니다.\n정말 일괄(강제) 완료 처리하시겠습니까?`);
         if (!confirmResult) return;
     }
 
@@ -487,8 +501,12 @@ const verifyAllActions = async () => {
                                     </div>
                                 </div>
 
-                                <span v-if="item.detection?.is_verified"
-                                    class="text-[10px] font-bold text-green-600 bg-green-50 px-2 py-1 rounded">제자리-조치완료</span>
+                                <span v-if="item.detection?.is_verified">
+                                    <span v-if="item.detection?.verification_method === 'BATCH_OVERWRITE'"
+                                        class="text-[10px] font-bold text-stone-600 bg-stone-200 px-2 py-1 rounded">일괄-강제완료</span>
+                                    <span v-else
+                                        class="text-[10px] font-bold text-green-600 bg-green-50 px-2 py-1 rounded">제자리-조치완료</span>
+                                </span>
                                 <div v-else class="text-right flex flex-col items-end gap-1">
                                     <span class="text-[10px] text-stone-400">자세히 보기 ❯</span>
                                 </div>
@@ -578,7 +596,12 @@ const verifyAllActions = async () => {
                                     배치</span>
                                 <span
                                     v-else-if="selectedBook.status === 'MISPLACED' && selectedBook._raw_detection?.is_verified"
-                                    class="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded-full">제자리-조치완료</span>
+                                    class="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                                    :class="selectedBook._raw_detection?.verification_method === 'BATCH_OVERWRITE' ? 'bg-stone-200 text-stone-700' : 'bg-green-100 text-green-700'">
+                                    {{ selectedBook._raw_detection?.verification_method === 'BATCH_OVERWRITE' ?
+                                    '일괄-강제완료' :
+                                    '제자리-조치완료' }}
+                                </span>
                                 <span v-else-if="selectedBook.status === 'MISPLACED'"
                                     class="text-[10px] font-bold bg-red-100 text-red-700 px-2 py-0.5 rounded-full">순서
                                     오류</span>

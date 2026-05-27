@@ -84,6 +84,9 @@ class ScanResultDetail(Base):
     # 🚨 [추가됨] 프론트엔드에서 오배열 확인(조치)을 완료했는지 여부
     is_verified = Column(Boolean, default=False)
 
+    # 🌟 [신규 추가] 조치 방법 기록 ('MANUAL': 개별 확인, 'BATCH_OVERWRITE': 일괄 강제 완료)
+    verification_method = Column(String(20), nullable=True)
+
     confidence = Column(Integer, default=0)
     crop_image_url = Column(String(255), nullable=True)
 

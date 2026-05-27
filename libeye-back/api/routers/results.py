@@ -178,14 +178,14 @@ def force_match_detection(session_id: str, detection_id: str, req: MatchRequest,
     db.commit()
     return {"message": "Matched successfully and recalculated status"}
 
-# 🚨 [신규 추가] 오배열 조치 완료 반영 API
+# 1. 기존 개별 조치 완료 API (MANUAL 기록)
 @router.put("/{session_id}/detections/{detection_id}/verify")
 def verify_misplacement(session_id: str, detection_id: str, db: Session = Depends(get_db)):
-    """오배열 판정된 도서를 사용자가 물리적으로 이동 후 '확인 완료' 처리합니다."""
     det = db.query(ScanResultDetail).filter_by(session_id=session_id, detection_id=detection_id).first()
     if not det: raise HTTPException(status_code=404, detail="Detection not found")
     
     det.is_verified = True
+    det.verification_method = 'MANUAL' # 🌟 개별 확인 기록
     db.commit()
     return {"message": "Verification completed"}
 
@@ -250,19 +250,18 @@ def delete_false_detection(session_id: str, detection_id: str, db: Session = Dep
     return {"message": "Detection deleted and status recalculated"}
 
 # 🚨 [신규 추가] 세션 내 모든 오배열 일괄 조치 완료 반영 API
+# 2. 일괄 조치 완료 API (BATCH_OVERWRITE 기록)
 @router.put("/{session_id}/verify-all")
-def verify_all_misplacements(session_id: str, db: Session = Depends(get_db)):
-    """해당 세션의 모든 오배열(MISPLACED) 도서를 일괄 조치 완료 처리합니다."""
-    # 아직 조치 완료되지 않은 오배열 사항들을 모두 조회
-    unverified_dets = db.query(ScanResultDetail).filter_by(
-        session_id=session_id, 
-        status='MISPLACED', 
-        is_verified=False
+def verify_all_actions(session_id: str, db: Session = Depends(get_db)):
+    unverified_dets = db.query(ScanResultDetail).filter(
+        ScanResultDetail.session_id == session_id, 
+        ScanResultDetail.status.in_(['MISPLACED', 'UNKNOWN', 'EXTRA']),
+        ScanResultDetail.is_verified == False
     ).all()
     
-    # 모두 확인 완료(True)로 변경
     for det in unverified_dets:
         det.is_verified = True
+        det.verification_method = 'BATCH_OVERWRITE' # 🌟 강제 일괄 덮어쓰기 기록
         
     db.commit()
-    return {"message": "All misplacements verified successfully", "updated_count": len(unverified_dets)}
+    return {"message": "All pending actions overwritten successfully", "updated_count": len(unverified_dets)}
