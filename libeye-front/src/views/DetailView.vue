@@ -284,7 +284,7 @@ const selectCandidate = (book: any) => {
 const ignoreDetection = async () => {
     // 상세창이 열려있으면 selectedBook에서, 수동교정창이면 editingBook에서 ID 추출
     const detectionId = selectedBook.value?._raw_detection?.detection_id || editingBook.value?.detection_id;
-    
+
     if (!detectionId) return;
 
     if (!confirm('이 항목을 책이 아닌 것으로 간주하고 목록에서 완전히 삭제하시겠습니까?')) return;
@@ -293,17 +293,42 @@ const ignoreDetection = async () => {
         await fetch(`/api/v1/sessions/${sessionId.value}/detections/${detectionId}`, {
             method: 'DELETE'
         });
-        
+
         // 어떤 모달이 열려있었든 모두 닫기 및 초기화
         selectedBook.value = null;
         closeEditModal();
-        
+
         window.location.reload(); // 성공 시 화면 동기화
     } catch (e) {
         alert('탐지 결과 삭제 중 오류가 발생했습니다.');
     }
 };
 
+// 일괄 조치 완료 처리 로직
+const verifyAllActions = async () => {
+    // 조치 완료되지 않은 항목(오배열인데 is_verified가 false인 항목) 필터링
+    const unverifiedItems = sessionData.value?.detections.filter(
+        (d: any) => d.status === 'MISPLACED' && !d.is_verified
+    ) || [];
+
+    // 조치되지 않은 항목이 있다면 팝업으로 사용자에게 물어봄
+    if (unverifiedItems.length > 0) {
+        const confirmResult = confirm(`아직 조치되지 않은 사항이 ${unverifiedItems.length}건 있습니다.\n정말 일괄 완료 처리하시겠습니까?`);
+        if (!confirmResult) return;
+    }
+
+    try {
+        await fetch(`/api/v1/sessions/${sessionId.value}/verify-all`, {
+            method: 'PUT'
+        });
+        alert('모든 조치가 완료 처리되었습니다.');
+        // 완료 후 목록(히스토리) 화면으로 이동
+        router.push('/history');
+    } catch (e) {
+        alert('일괄 조치 완료 처리 중 오류가 발생했습니다.');
+        console.error(e);
+    }
+};
 
 </script>
 
@@ -346,7 +371,7 @@ const ignoreDetection = async () => {
                 <div class="text-xs text-amber-800 leading-snug">
                     <span class="font-bold">서가 불일치 감지</span><br />
                     선택한 서가(<span class="font-mono font-semibold">{{ sessionData.location_warning.selected_location_id
-                        }}</span>)와
+                    }}</span>)와
                     실제 스캔된 책들의 서가(<span class="font-mono font-semibold">{{
                         sessionData.location_warning.actual_location_id }}</span>)가 다릅니다.
                     올바른 서가를 선택하고 다시 스캔해주세요.
@@ -394,12 +419,12 @@ const ignoreDetection = async () => {
                                     left: `${getPolygonLabelPos(d, img.image_id)!.x + 24}px`,
                                     top: `${getPolygonLabelPos(d, img.image_id)!.y - 20}px`
                                 }" :class="{
-                'border-[#2E7D32] text-[#2E7D32]': d.status === 'MISPLACED' && d.is_verified,
-                'border-[#D32F2F] text-[#D32F2F]': d.status === 'MISPLACED' && !d.is_verified,
-                'border-[#F57C00] text-[#F57C00]': d.status === 'UNKNOWN' || d.status === 'MISSING'
-            }">
+                                    'border-[#2E7D32] text-[#2E7D32]': d.status === 'MISPLACED' && d.is_verified,
+                                    'border-[#D32F2F] text-[#D32F2F]': d.status === 'MISPLACED' && !d.is_verified,
+                                    'border-[#F57C00] text-[#F57C00]': d.status === 'UNKNOWN' || d.status === 'MISSING'
+                                }">
                                 {{ d.status === 'MISPLACED' && d.is_verified ? '제자리-조치완료' : d.status === 'MISPLACED' ?
-                                '오배열' : '확인요망' }}
+                                    '오배열' : '확인요망' }}
                             </span>
                         </template>
                     </template>
@@ -527,7 +552,7 @@ const ignoreDetection = async () => {
                                                 d.ocr_call_number || '해독 불가' }}
                                         </div>
                                         <div class="text-[10px] text-stone-500 mt-0.5">신뢰도 {{ Math.round(d.confidence)
-                                            }}%</div>
+                                        }}%</div>
                                     </div>
                                 </div>
                                 <button @click="openEditModal(d)"
@@ -586,7 +611,7 @@ const ignoreDetection = async () => {
                         <div class="flex flex-col gap-0.5">
                             <span class="text-[10px] font-bold text-stone-400">DB 장서 도서명</span>
                             <span class="font-bold text-stone-900 break-all line-clamp-1">{{ selectedBook.title
-                                }}</span>
+                            }}</span>
                         </div>
                         <div class="border-t border-stone-200/60 my-0.5"></div>
 
@@ -594,7 +619,7 @@ const ignoreDetection = async () => {
                             <div class="flex flex-col gap-0.5">
                                 <span class="text-[10px] font-bold text-stone-400">청구기호</span>
                                 <span class="font-semibold text-stone-800 font-mono">{{ selectedBook.call_number
-                                    }}</span>
+                                }}</span>
                             </div>
                             <div class="flex flex-col gap-0.5">
                                 <span class="text-[10px] font-bold text-stone-400">배정 서가 위치</span>
@@ -644,9 +669,14 @@ const ignoreDetection = async () => {
             </div>
 
             <div class="absolute bottom-0 w-full bg-white border-t border-stone-200 p-3 flex gap-2">
-                <button class="flex-1 bg-stone-100 text-stone-700 text-xs font-bold py-3 rounded-xl">임시 저장</button>
                 <button @click="router.push('/history')"
-                    class="flex-[2] bg-[#2E7D32] text-white text-xs font-bold py-3 rounded-xl">조치 완료 및 반영</button>
+                    class="flex-1 bg-stone-100 text-stone-700 hover:bg-stone-200 text-xs font-bold py-3 rounded-xl transition-colors">
+                    목록으로
+                </button>
+                <button @click="verifyAllActions"
+                    class="flex-[2] bg-[#2E7D32] hover:bg-green-700 text-white text-xs font-bold py-3 rounded-xl transition-colors shadow-md">
+                    일괄 조치 완료 처리
+                </button>
             </div>
 
             <!-- Edit Modal -->
@@ -682,7 +712,7 @@ const ignoreDetection = async () => {
                     <div class="bg-stone-50 p-2.5 rounded-lg text-[10px] text-stone-600 flex flex-col gap-1 font-mono">
                         <div>🤖 <strong>AI OCR 결과:</strong> {{ editingBook?.ocr_call_number || '판독 불가' }}</div>
                         <div>🎯 <strong>추론 신뢰도:</strong> {{ editingBook ? Math.round(editingBook.confidence) : 0
-                        }}%</div>
+                            }}%</div>
                     </div>
 
                     <div class="flex flex-col gap-3">
@@ -711,7 +741,7 @@ const ignoreDetection = async () => {
                             class="w-full bg-red-50 text-red-600 hover:text-red-700 border border-red-200 font-bold py-2.5 rounded-xl text-xs transition-colors flex items-center justify-center gap-1 shadow-sm">
                             🗑️ 책이 아님 (탐지 결과 삭제)
                         </button>
-                        
+
                         <div class="flex gap-2">
                             <button @click="closeEditModal"
                                 class="flex-1 bg-stone-100 text-stone-700 text-xs font-bold py-3.5 rounded-xl">

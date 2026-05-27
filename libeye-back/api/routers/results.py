@@ -248,3 +248,21 @@ def delete_false_detection(session_id: str, detection_id: str, db: Session = Dep
                 
     db.commit()
     return {"message": "Detection deleted and status recalculated"}
+
+# 🚨 [신규 추가] 세션 내 모든 오배열 일괄 조치 완료 반영 API
+@router.put("/{session_id}/verify-all")
+def verify_all_misplacements(session_id: str, db: Session = Depends(get_db)):
+    """해당 세션의 모든 오배열(MISPLACED) 도서를 일괄 조치 완료 처리합니다."""
+    # 아직 조치 완료되지 않은 오배열 사항들을 모두 조회
+    unverified_dets = db.query(ScanResultDetail).filter_by(
+        session_id=session_id, 
+        status='MISPLACED', 
+        is_verified=False
+    ).all()
+    
+    # 모두 확인 완료(True)로 변경
+    for det in unverified_dets:
+        det.is_verified = True
+        
+    db.commit()
+    return {"message": "All misplacements verified successfully", "updated_count": len(unverified_dets)}
