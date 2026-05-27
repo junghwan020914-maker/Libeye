@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, computed } from 'vue';
-import { useRouter, useRoute } from 'vue-router'; // 💡 useRoute 추가
+import { useRouter, useRoute } from 'vue-router';
 import { startSession, getLocations } from '../api/sessionAPI';
 
 const router = useRouter();
-const route = useRoute(); // 💡 라우트 객체 생성 추가
+const route = useRoute();
 const videoRef = ref<HTMLVideoElement | null>(null);
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 const previewUrl = ref<string | null>(null);
@@ -18,25 +18,33 @@ const locations = ref<any[]>([]);
 const selectedLocation = ref<string | null>(null);
 const showLocationModal = ref(true);
 
+// Location select handle
 const selectLocation = (locationId: string) => {
-  selectedLocation.value = locationId;    // 선택된 구역 ID 저장
-  showLocationModal.value = false;       // 구역 선택 모달 닫기
-  startCamera();                         // 🎥 즉시 카메라 켜기
+  selectedLocation.value = locationId;
+  showLocationModal.value = false;
+  startCamera();
 };
 
 // Crop & Upload State
 const isCropping = ref(false);
 const uploadedImage = ref<HTMLImageElement | null>(null);
-const cropStart = ref({ x: 0, y: 0 });
-const cropEnd = ref({ x: 0, y: 0 });
-const isDraggingCrop = ref(false);
-const fileInputRef = ref<HTMLInputElement | null>(null);
-const imageContainerRef = ref<HTMLDivElement | null>(null);
 
-// 🚨 기존 상태 변수들 아래에 다중 촬영용 상태 추가
+// 💡 새로운 크롭박스 상태 관리 (X1, Y1, X2, Y2 절대 좌표 구조)
+const cropBox = ref({ x1: 0, y1: 0, x2: 0, y2: 0 });
+const hasCropBox = ref(false); // 크롭박스가 유효하게 생성되었는지 여부
+
+// 드래그 액션 상태: 'none' | 'create' | 'move' | 'resize-tl' | 'resize-tr' | 'resize-bl' | 'resize-br'
+const dragAction = ref('none'); 
+const dragStartOffset = ref({ x: 0, y: 0 }); // 이동/크기조절용 초기 offset
+const initialCropBox = ref({ x1: 0, y1: 0, x2: 0, y2: 0 });
+
+// 다중 촬영용 상태
 const capturedFiles = ref<File[]>([]);
 const capturedPreviews = ref<string[]>([]);
-const isConfirming = ref(false); // 촬영 후 확인 창 표시 여부
+const isConfirming = ref(false);
+
+const fileInputRef = ref<HTMLInputElement | null>(null);
+const imageContainerRef = ref<HTMLDivElement | null>(null);
 
 // Portrait mode check
 const isPortrait = ref(window.matchMedia("(orientation: portrait)").matches);
@@ -44,11 +52,12 @@ const handleOrientationChange = (e: MediaQueryListEvent) => {
   isPortrait.value = e.matches;
 };
 
+// 💡 렌더링 및 연산을 위한 computed 크롭박스 (음수 치우침 방지)
 const cropRect = computed(() => {
-  const x = Math.min(cropStart.value.x, cropEnd.value.x);
-  const y = Math.min(cropStart.value.y, cropEnd.value.y);
-  const w = Math.abs(cropStart.value.x - cropEnd.value.x);
-  const h = Math.abs(cropStart.value.y - cropEnd.value.y);
+  const x = Math.min(cropBox.value.x1, cropBox.value.x2);
+  const y = Math.min(cropBox.value.y1, cropBox.value.y2);
+  const w = Math.abs(cropBox.value.x1 - cropBox.value.x2);
+  const h = Math.abs(cropBox.value.y1 - cropBox.value.y2);
   return { x, y, w, h };
 });
 
@@ -70,7 +79,7 @@ const exitFullScreen = () => {
 };
 
 const startCamera = async () => {
-  if (!selectedLocation.value) return; // 구역이 선택되어야만 카메라 시작
+  if (!selectedLocation.value) return;
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
     currentStream.value = stream;
@@ -91,7 +100,6 @@ const stopCamera = () => {
   }
 };
 
-// 🚨 기존 getPureBase64 함수 삭제 후 아래 함수로 교체
 const dataURLtoFile = (dataurl: string, filename: string): File => {
   const arr = dataurl.split(',');
   const mime = arr[0].match(/:(.*?);/)?.[1] || 'image/jpeg';
@@ -120,14 +128,12 @@ const takePhoto = async () => {
   
   stopCamera();
   
-  // File 객체로 변환하여 배열에 누적
   const file = dataURLtoFile(dataUrl, `camera_${Date.now()}.jpg`);
   if (file) {
     capturedFiles.value.push(file);
     capturedPreviews.value.push(dataUrl);
   }
   
-  // 확인 창 띄우기
   isConfirming.value = true;
 };
 
@@ -145,6 +151,7 @@ const handleFileUpload = (e: Event) => {
     stopCamera();
     previewUrl.value = ev.target?.result as string;
     isCropping.value = true;
+    hasCropBox.value = true; // 기본 가이드라인 박스 활성화
     
     const img = new Image();
     img.onload = () => {
@@ -152,8 +159,13 @@ const handleFileUpload = (e: Event) => {
       if (imageContainerRef.value) {
         const cw = imageContainerRef.value.clientWidth;
         const ch = imageContainerRef.value.clientHeight;
-        cropStart.value = { x: cw * 0.1, y: ch * 0.2 };
-        cropEnd.value = { x: cw * 0.9, y: ch * 0.8 };
+        // 처음에 적당히 중앙에 크롭 가이드라인 배치
+        cropBox.value = {
+          x1: cw * 0.1,
+          y1: ch * 0.2,
+          x2: cw * 0.9,
+          y2: ch * 0.8
+        };
       }
     };
     img.src = previewUrl.value as string;
@@ -161,31 +173,137 @@ const handleFileUpload = (e: Event) => {
   reader.readAsDataURL(file);
 };
 
-const startCropDrag = (e: MouseEvent | TouchEvent) => {
+// 💡 헬퍼 함수: 터치/마우스 이벤트에서 컨테이너 기준 좌표 구하기
+const getClientCoords = (e: MouseEvent | TouchEvent) => {
   const evt = e instanceof MouseEvent ? e : e.touches[0];
-  if (!imageContainerRef.value) return;
+  if (!imageContainerRef.value) return { x: 0, y: 0 };
   const rect = imageContainerRef.value.getBoundingClientRect();
-  cropStart.value = { x: evt.clientX - rect.left, y: evt.clientY - rect.top };
-  cropEnd.value = { x: evt.clientX - rect.left, y: evt.clientY - rect.top };
-  isDraggingCrop.value = true;
-};
-
-const moveCropDrag = (e: MouseEvent | TouchEvent) => {
-  if (!isDraggingCrop.value || !imageContainerRef.value) return;
-  const evt = e instanceof MouseEvent ? e : e.touches[0];
-  const rect = imageContainerRef.value.getBoundingClientRect();
-  cropEnd.value = { 
-    x: Math.max(0, Math.min(rect.width, evt.clientX - rect.left)), 
-    y: Math.max(0, Math.min(rect.height, evt.clientY - rect.top)) 
+  return {
+    x: evt.clientX - rect.left,
+    y: evt.clientY - rect.top
   };
 };
 
+// 💡 헬퍼 함수: 클릭한 곳이 모서리(핸들)인지 판별 (반경 20px 허용)
+const getResizeHandle = (x: number, y: number) => {
+  if (!hasCropBox.value) return 'none';
+  const r = 20; // 터치 타겟 영역 반경
+  const { x1, y1, x2, y2 } = cropBox.value;
+  
+  const left = Math.min(x1, x2);
+  const right = Math.max(x1, x2);
+  const top = Math.min(y1, y2);
+  const bottom = Math.max(y1, y2);
+
+  if (Math.abs(x - left) < r && Math.abs(y - top) < r) return 'resize-tl';
+  if (Math.abs(x - right) < r && Math.abs(y - top) < r) return 'resize-tr';
+  if (Math.abs(x - left) < r && Math.abs(y - bottom) < r) return 'resize-bl';
+  if (Math.abs(x - right) < r && Math.abs(y - bottom) < r) return 'resize-br';
+  
+  // 모서리가 아니고 크롭박스 내부인지 확인
+  if (x >= left && x <= right && y >= top && y <= bottom) return 'move';
+
+  return 'none';
+};
+
+// 💡 드래그 시작 통합 제어
+const startCropDrag = (e: MouseEvent | TouchEvent) => {
+  if (e.cancelable) e.preventDefault(); // 파란 블록 지정(선택방지) 강제 차단
+  const { x, y } = getClientCoords(e);
+  
+  const handle = getResizeHandle(x, y);
+  
+  if (handle !== 'none') {
+    // 1. 모서리 조절 또는 박스 전체 이동
+    dragAction.value = handle;
+    dragStartOffset.value = { x, y };
+    initialCropBox.value = { ...cropBox.value };
+  } else {
+    // 2. 다른 곳을 터치하면 박스가 사라지지 않고 그 자리에서 새 크롭박스 그리기 시작
+    dragAction.value = 'create';
+    hasCropBox.value = true;
+    cropBox.value = { x1: x, y1: y, x2: x, y2: y };
+  }
+};
+
+// 💡 드래그 중 이동 및 크기 조절 매핑
+const moveCropDrag = (e: MouseEvent | TouchEvent) => {
+  if (dragAction.value === 'none' || !imageContainerRef.value) return;
+  if (e.cancelable) e.preventDefault();
+  
+  const { x, y } = getClientCoords(e);
+  const rect = imageContainerRef.value.getBoundingClientRect();
+  
+  // 경계 제한 처리용 헬퍼 구하기
+  const curX = Math.max(0, Math.min(rect.width, x));
+  const curY = Math.max(0, Math.min(rect.height, y));
+  
+  const dx = x - dragStartOffset.value.x;
+  const dy = y - dragStartOffset.value.y;
+
+  const left = Math.min(initialCropBox.value.x1, initialCropBox.value.x2);
+  const right = Math.max(initialCropBox.value.x1, initialCropBox.value.x2);
+  const top = Math.min(initialCropBox.value.y1, initialCropBox.value.y2);
+  const bottom = Math.max(initialCropBox.value.y1, initialCropBox.value.y2);
+
+  if (dragAction.value === 'create') {
+    cropBox.value.x2 = curX;
+    cropBox.value.y2 = curY;
+  } 
+  else if (dragAction.value === 'move') {
+    // 박스 전체 이동 제한 처리 (화면 밖 방지)
+    let moveX = dx;
+    let moveY = dy;
+    if (left + moveX < 0) moveX = -left;
+    if (right + moveX > rect.width) moveX = rect.width - right;
+    if (top + moveY < 0) moveY = -top;
+    if (bottom + moveY > rect.height) moveY = rect.height - bottom;
+
+    cropBox.value = {
+      x1: initialCropBox.value.x1 + moveX,
+      y1: initialCropBox.value.y1 + moveY,
+      x2: initialCropBox.value.x2 + moveX,
+      y2: initialCropBox.value.y2 + moveY
+    };
+  } 
+  else {
+    // 정규화된 상자 기준 모서리 작동
+    if (dragAction.value === 'resize-tl') {
+      cropBox.value.x1 = Math.min(right - 10, curX);
+      cropBox.value.y1 = Math.min(bottom - 10, curY);
+      cropBox.value.x2 = right;
+      cropBox.value.y2 = bottom;
+    } else if (dragAction.value === 'resize-tr') {
+      cropBox.value.x1 = left;
+      cropBox.value.y1 = Math.min(bottom - 10, curY);
+      cropBox.value.x2 = Math.max(left + 10, curX);
+      cropBox.value.y2 = bottom;
+    } else if (dragAction.value === 'resize-bl') {
+      cropBox.value.x1 = Math.min(right - 10, curX);
+      cropBox.value.y1 = top;
+      cropBox.value.x2 = right;
+      cropBox.value.y2 = Math.max(top + 10, curY);
+    } else if (dragAction.value === 'resize-br') {
+      cropBox.value.x1 = left;
+      cropBox.value.y1 = top;
+      cropBox.value.x2 = Math.max(left + 10, curX);
+      cropBox.value.y2 = Math.max(top + 10, curY);
+    }
+  }
+};
+
 const endCropDrag = () => {
-  isDraggingCrop.value = false;
+  if (dragAction.value === 'create') {
+    // 박스 크기가 너무 작으면 무효화 방지용 최소 기준
+    if (cropRect.value.w < 15 || cropRect.value.h < 15) {
+      // 기존 박스 유지 또는 복구 처리 가능
+    }
+  }
+  dragAction.value = 'none';
 };
 
 const applyCropAndUpload = async () => {
-  if (!uploadedImage.value || !canvasRef.value || !imageContainerRef.value) return;
+  if (!uploadedImage.value || !canvasRef.value || !imageContainerRef.value || !hasCropBox.value) return;
   
   const canvas = canvasRef.value;
   const ctx = canvas.getContext('2d');
@@ -239,7 +357,6 @@ const applyCropAndUpload = async () => {
     return;
   }
   
-  // File 객체로 변환하여 배열에 누적
   const file = dataURLtoFile(croppedDataUrl, `crop_${Date.now()}.jpg`);
   if (file) {
     capturedFiles.value.push(file);
@@ -248,12 +365,9 @@ const applyCropAndUpload = async () => {
   
   isCropping.value = false;
   previewUrl.value = null;
-  // 확인 창 띄우기
   isConfirming.value = true;
 };
 
-
-// 🚨 추가됨: 이어서 촬영하기, 특정 사진 삭제하기, 최종 전체 업로드하기 함수
 const takeAnother = () => {
   isConfirming.value = false;
   previewUrl.value = null;
@@ -263,7 +377,6 @@ const takeAnother = () => {
 const removeCaptured = (index: number) => {
   capturedFiles.value.splice(index, 1);
   capturedPreviews.value.splice(index, 1);
-  // 만약 다 지웠다면 다시 카메라 화면으로 복귀
   if (capturedFiles.value.length === 0) {
     takeAnother();
   }
@@ -274,10 +387,7 @@ const uploadAll = async () => {
   
   isUploading.value = true;
   try {
-    // 누적된 전체 파일 배열을 서버로 전송!
     const response = await startSession(selectedLocation.value || 'UNKNOWN', capturedFiles.value);
-    
-    // 업로드 성공 시 대기열 비우고 DetailView로 이동
     capturedFiles.value = [];
     capturedPreviews.value = [];
     router.push({ name: 'detail', query: { sessionId: response.session_id } });
@@ -292,7 +402,6 @@ const uploadAll = async () => {
 const simulateCapture = async () => {
   isUploading.value = true;
   try {
-    // 🚨 수정됨: Data URL 형식을 갖춘 더미 문자열로 변경
     const dummyDataUrl = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=";
     const file = dataURLtoFile(dummyDataUrl, 'dummy.png');
     
@@ -306,7 +415,6 @@ const simulateCapture = async () => {
 };
 
 onMounted(async () => {
-  // 화면 UI 및 이벤트 초기 설정
   document.body.classList.add('camera-mode');
   enterFullScreen();
   
@@ -314,21 +422,13 @@ onMounted(async () => {
   mq.addEventListener("change", handleOrientationChange);
 
   try {
-    // 1. 위치 데이터 로드
     locations.value = await getLocations();
-    
-    // 2. 지도 뷰에서 넘어온 locationId 파라미터 확인
     const queryLocationId = route.query.locationId;
     
     if (queryLocationId) {
-      // 불러온 목록 중에 해당 ID가 있는지 확인
       const matchedLoc = locations.value.find((loc: any) => loc.location_id === queryLocationId);
-      
       if (matchedLoc) {
-        // 위치 자동 선택
         selectedLocation.value = matchedLoc.location_id; 
-        
-        // 💡 3. 위치 선택 모달을 숨겨서 바로 카메라 화면으로 진입!
         showLocationModal.value = false; 
       }
     }
@@ -338,7 +438,6 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
-  // 카메라 떠날 때 camera-mode 제거 → 원래 레이아웃 복원
   document.body.classList.remove('camera-mode');
   exitFullScreen();
   stopCamera();
@@ -348,15 +447,13 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <main class="flex-col h-full bg-black relative z-30 flex animate-fade-in">
-    <!-- 가로 모드 유도 오버레이 -->
+  <main class="flex-col h-full bg-black relative z-30 flex animate-fade-in select-none">
     <div v-if="isPortrait && !isCropping && !showLocationModal" class="absolute inset-0 z-50 bg-black/90 flex flex-col items-center justify-center p-6 text-center backdrop-blur-md">
       <div class="text-6xl mb-6 animate-pulse">📱🔄</div>
       <h2 class="text-white text-2xl font-bold mb-4">가로 모드로 전환해주세요</h2>
       <p class="text-stone-300 text-sm">정확한 서가 인식을 위해<br>기기를 가로로 눕혀서 촬영해야 합니다.</p>
     </div>
 
-    <!-- 구역 선택 모달 -->
     <div v-if="showLocationModal" class="absolute inset-0 z-[60] bg-stone-900 flex flex-col p-6 animate-fade-in">
       <div class="flex justify-between items-center mb-6">
         <button @click="router.push('/')" class="text-white text-2xl">◀</button>
@@ -385,14 +482,14 @@ onBeforeUnmount(() => {
       <div class="text-center" v-if="selectedLocation">
         <h1 class="text-sm font-bold">{{ selectedLocation }}</h1>
         <p v-if="!isCropping" class="text-[10px] text-white/70">가이드라인에 맞춰 서가를 촬영해주세요</p>
-        <p v-else class="text-[10px] text-white/70">드래그하여 서가 영역을 선택하세요</p>
+        <p v-else class="text-[10px] text-white/70">드래그하여 크롭 조절 및 중앙 터치로 상자 이동이 가능합니다</p>
       </div>
       <button class="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center text-xl active:bg-white/40">⚡</button>
     </div>
 
     <div 
       ref="imageContainerRef"
-      class="flex-1 relative overflow-hidden flex items-center justify-center bg-stone-800"
+      class="flex-1 relative overflow-hidden flex items-center justify-center bg-stone-800 touch-none select-none"
       @mousedown="isCropping ? startCropDrag($event) : null"
       @mousemove="isCropping ? moveCropDrag($event) : null"
       @mouseup="isCropping ? endCropDrag() : null"
@@ -403,9 +500,8 @@ onBeforeUnmount(() => {
     >
       <video v-show="!previewUrl && !isCameraError" ref="videoRef" autoplay playsinline class="absolute w-full h-full object-cover"></video>
       <canvas ref="canvasRef" class="hidden"></canvas>
-      <img v-if="previewUrl" :src="previewUrl" class="absolute w-full h-full object-contain pointer-events-none z-10" />
+      <img v-if="previewUrl" :src="previewUrl" class="absolute w-full h-full object-contain pointer-events-none z-10 select-none" draggable="false" />
       
-      <!-- 촬영용 직사각형 가이드 -->
       <div v-if="!previewUrl && !isCameraError" class="absolute border-2 border-white/50 flex flex-col justify-evenly items-center pointer-events-none z-10" style="left: 5%; right: 5%; top: 20%; bottom: 20%; box-shadow: 0 0 0 9999px rgba(0,0,0,0.6);">
         <div class="w-full h-px bg-white/30 absolute top-1/3"></div>
         <div class="w-full h-px bg-white/30 absolute top-2/3"></div>
@@ -416,13 +512,12 @@ onBeforeUnmount(() => {
         <div class="w-6 h-6 border-r-4 border-b-4 border-[#4CAF50] absolute bottom-[-2px] right-[-2px]"></div>
       </div>
 
-      <!-- 크롭용 드래그 박스 -->
-      <div v-if="isCropping && cropRect.w > 0" class="absolute z-20 pointer-events-none border-2 border-[#4CAF50] bg-[#4CAF50]/10"
+      <div v-if="isCropping && hasCropBox && cropRect.w > 0" class="absolute z-20 border-2 border-[#4CAF50] bg-[#4CAF50]/15 cursor-move"
            :style="{ left: cropRect.x + 'px', top: cropRect.y + 'px', width: cropRect.w + 'px', height: cropRect.h + 'px' }">
-        <div class="w-3 h-3 bg-white border border-[#4CAF50] absolute -top-1.5 -left-1.5"></div>
-        <div class="w-3 h-3 bg-white border border-[#4CAF50] absolute -top-1.5 -right-1.5"></div>
-        <div class="w-3 h-3 bg-white border border-[#4CAF50] absolute -bottom-1.5 -left-1.5"></div>
-        <div class="w-3 h-3 bg-white border border-[#4CAF50] absolute -bottom-1.5 -right-1.5"></div>
+        <div class="w-4 h-4 bg-white border-2 border-[#4CAF50] rounded-full absolute -top-2 -left-2 cursor-nwse-resize z-30"></div>
+        <div class="w-4 h-4 bg-white border-2 border-[#4CAF50] rounded-full absolute -top-2 -right-2 cursor-nesw-resize z-30"></div>
+        <div class="w-4 h-4 bg-white border-2 border-[#4CAF50] rounded-full absolute -bottom-2 -left-2 cursor-nesw-resize z-30"></div>
+        <div class="w-4 h-4 bg-white border-2 border-[#4CAF50] rounded-full absolute -bottom-2 -right-2 cursor-nwse-resize z-30"></div>
       </div>
 
       <div v-if="isCameraError && !isCropping" class="absolute inset-0 bg-stone-900 z-20 flex flex-col items-center justify-center p-6 text-center">
@@ -433,7 +528,6 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <!-- 숨겨진 파일 인풋 -->
     <input type="file" ref="fileInputRef" accept="image/*" class="hidden" @change="handleFileUpload" />
 
     <div class="h-32 bg-black flex items-center justify-around px-6 shrink-0 relative z-20">
@@ -446,7 +540,7 @@ onBeforeUnmount(() => {
       </button>
 
       <button v-else @click="applyCropAndUpload" :disabled="isUploading" class="px-6 py-3 bg-[#4CAF50] text-white font-bold rounded-full active:scale-95 transition-all disabled:opacity-50 shadow-lg shadow-[#4CAF50]/20">
-        크롭 및 업로드
+        크롭 완료
       </button>
 
       <button v-if="isCropping" @click="() => { isCropping = false; previewUrl = null; startCamera(); }" class="w-12 h-12 text-white/80 text-lg flex items-center justify-center bg-stone-800 rounded-full active:bg-stone-700">
@@ -485,7 +579,6 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <!-- 로딩 오버레이 -->
     <div v-if="isUploading" class="absolute inset-0 bg-stone-900/90 z-50 flex flex-col items-center justify-center backdrop-blur-sm">
       <div class="w-16 h-16 border-4 border-stone-600 border-t-green-500 rounded-full animate-spin mb-6"></div>
       <h2 class="text-white font-extrabold text-lg tracking-wide animate-pulse">Vision AI 분석 중...</h2>
@@ -494,3 +587,15 @@ onBeforeUnmount(() => {
   </main>
 </template>
 
+<style scoped>
+/* 💡 화면이 파랗게 반전되는 드래그 부작용 방지용 스타일 추가 */
+main, img, div {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+</style>
