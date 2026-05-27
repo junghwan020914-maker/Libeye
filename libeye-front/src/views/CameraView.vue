@@ -18,6 +18,11 @@ const locations = ref<any[]>([]);
 const selectedLocation = ref<string | null>(null);
 const showLocationModal = ref(true);
 
+const selectLocation = (locationId: string) => {
+  selectedLocation.value = locationId;    // 선택된 구역 ID 저장
+  showLocationModal.value = false;       // 구역 선택 모달 닫기
+  startCamera();                         // 🎥 즉시 카메라 켜기
+};
 
 // Crop & Upload State
 const isCropping = ref(false);
