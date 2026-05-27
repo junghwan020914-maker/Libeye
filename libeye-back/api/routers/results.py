@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel # 🚨 추가
 from sqlalchemy.orm import Session
+from sqlalchemy import func # 🚨 추가
 import re
-
 # 수정됨: api. 접두사 제거 (컨테이너 내에서는 api 폴더 안의 파일들이 최상위 경로임)
 from database import get_db 
 # 🚨 수정: ScanImage 모델 임포트 추가
@@ -75,9 +76,7 @@ async def get_scan_results(session_id: str, db: Session = Depends(get_db)):
 
     detections = []
     for r in results:
-        # 🚨 [수정됨] 2. 매칭된 도서(book)가 있다면, 원래 배정된 위치와 순서를 프론트엔드로 전달
         book_info = r.book
-
         detections.append({
             "detection_id": r.detection_id,
             "source_image_id": r.source_image_id,
@@ -86,9 +85,12 @@ async def get_scan_results(session_id: str, db: Session = Depends(get_db)):
             "ocr_title": r.raw_ocr_title,
             "ocr_call_number": r.raw_ocr_call_number,
             "status": r.status,
+            "is_verified": r.is_verified, # 🚨 [추가됨] 조치 완료 여부 전달
             "matched_book_id": r.matched_book_id,
-            "expected_order": book_info.expected_order if book_info else None,      # 원래 있어야 할 순서
-            "assigned_loc_id": book_info.assigned_loc_id if book_info else None,    # 원래 있어야 할 서가 위치 (EXTRA 판별용)
+            "matched_call_number": book_info.call_number if book_info else None,
+            "matched_title": book_info.title if book_info else None,
+            "expected_order": book_info.expected_order if book_info else None,
+            "assigned_loc_id": book_info.assigned_loc_id if book_info else None,
             "crop_image_url": _to_proxy_path(r.crop_image_url),
             "confidence": r.confidence
         })
@@ -136,3 +138,77 @@ async def get_scan_results(session_id: str, db: Session = Depends(get_db)):
         "expected_books": expected_books, # 🚨 [추가됨] 원본 도서 목록 반환
         "detections": detections
     }
+
+# 🚨 [신규 추가] 수동 강제 매칭 API 및 재계산 로직
+class MatchRequest(BaseModel):
+    book_id: str
+
+@router.put("/{session_id}/detections/{detection_id}/match")
+def force_match_detection(session_id: str, detection_id: str, req: MatchRequest, db: Session = Depends(get_db)):
+    """수동 교정 후 도서를 강제 매칭하고, 해당 서가의 전체 오배열 상태를 LIS 기반으로 재계산합니다."""
+    
+    det = db.query(ScanResultDetail).filter_by(session_id=session_id, detection_id=detection_id).first()
+    if not det: raise HTTPException(status_code=404, detail="Detection not found")
+    
+    book = db.query(BookMaster).filter_by(book_id=req.book_id).first()
+    if not book: raise HTTPException(status_code=404, detail="Book not found")
+    
+    # 1. DB 매칭 정보 강제 덮어쓰기
+    det.matched_book_id = book.book_id
+    
+    # 2. 오배열 상태(Misplacement) 재계산 (최장 증가 부분 수열 알고리즘 활용)
+    session = db.query(ScanSession).filter_by(session_id=session_id).first()
+    session.updated_at = func.now() # 업데이트 시간 트리거
+    
+    all_dets = db.query(ScanResultDetail).filter_by(session_id=session_id).order_by(ScanResultDetail.detected_order).all()
+    
+    valid_seq = []
+    for d in all_dets:
+        if d.matched_book_id:
+            b = db.query(BookMaster).filter_by(book_id=d.matched_book_id).first()
+            if b.assigned_loc_id == session.location_id:
+                valid_seq.append((d, b.expected_order))
+            else:
+                d.status = 'EXTRA'
+        else:
+            d.status = 'UNKNOWN'
+            
+    if valid_seq:
+        import bisect
+        tails = []
+        parent = {}
+        tail_indices = []
+        
+        for i, (d, exp_order) in enumerate(valid_seq):
+            idx = bisect.bisect_left(tails, exp_order)
+            if idx == len(tails):
+                tails.append(exp_order)
+                tail_indices.append(i)
+            else:
+                tails[idx] = exp_order
+                tail_indices[idx] = i
+            
+            parent[i] = tail_indices[idx - 1] if idx > 0 else -1
+            
+        lis_indices = set()
+        curr = tail_indices[-1] if tail_indices else -1
+        while curr != -1:
+            lis_indices.add(curr)
+            curr = parent[curr]
+            
+        for i, (d, exp_order) in enumerate(valid_seq):
+            d.status = 'MATCH' if i in lis_indices else 'MISPLACED'
+                
+    db.commit()
+    return {"message": "Matched successfully and recalculated status"}
+
+# 🚨 [신규 추가] 오배열 조치 완료 반영 API
+@router.put("/{session_id}/detections/{detection_id}/verify")
+def verify_misplacement(session_id: str, detection_id: str, db: Session = Depends(get_db)):
+    """오배열 판정된 도서를 사용자가 물리적으로 이동 후 '확인 완료' 처리합니다."""
+    det = db.query(ScanResultDetail).filter_by(session_id=session_id, detection_id=detection_id).first()
+    if not det: raise HTTPException(status_code=404, detail="Detection not found")
+    
+    det.is_verified = True
+    db.commit()
+    return {"message": "Verification completed"}

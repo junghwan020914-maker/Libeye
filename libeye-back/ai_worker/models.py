@@ -1,9 +1,8 @@
+# ... 기존 import 유지
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, Date
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-
-# 수정됨: .database 대신 database로 직접 임포트
 from database import Base
 
 # 1. Library_Master (위치/서가 마스터)
@@ -38,17 +37,16 @@ class ScanSession(Base):
     session_id = Column(String(50), primary_key=True)
     location_id = Column(String(50), ForeignKey('library_master.location_id'), nullable=True)
 
-    # 🚨 수정: 다중 이미지를 위해 기존 단일 image_url, is_image_deleted 삭제
-    status = Column(String(20), default='PENDING') # PENDING, PROCESSING, COMPLETED, FAILED
+    status = Column(String(20), default='PENDING')
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    # 🚨 [추가됨] 수정 발생 시 시간을 추적하기 위한 컬럼
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
-    # 세션 완료 시 파이프라인이 채워주는 집계 컬럼
-    total_books = Column(Integer, default=0)               # YOLO가 탐지한 총 책 권수
-    misplaced_count = Column(Integer, default=0)           # 오배열 책 수 (MISPLACED)
-    unknown_count = Column(Integer, default=0)             # 인식 실패 수 (UNKNOWN)
-    inferred_location_id = Column(String(50), nullable=True)  # 책 다수결로 추론된 실제 서가 ID
+    total_books = Column(Integer, default=0)
+    misplaced_count = Column(Integer, default=0)
+    unknown_count = Column(Integer, default=0)
+    inferred_location_id = Column(String(50), nullable=True)
 
-    # 🚨 수정: 세션 삭제 시 연관된 스캔 이미지와 결과 데이터가 모두 삭제되도록 cascade 설정
     images = relationship("ScanImage", back_populates="session", cascade="all, delete-orphan")
     results = relationship("ScanResultDetail", back_populates="session", cascade="all, delete-orphan")
 
@@ -68,44 +66,30 @@ class ScanImage(Base):
     session = relationship("ScanSession", back_populates="images")
     results = relationship("ScanResultDetail", back_populates="source_image")
 
-# 4. Scan_Result_Detail (YOLO + VLM 분석 결과 및 보정 데이터 저장)
 class ScanResultDetail(Base):
     __tablename__ = 'scan_result_detail'
 
     detection_id = Column(String(50), primary_key=True)
-
-    # 해당 스캔 세션 연결
     session_id = Column(String(50), ForeignKey('scan_session.session_id'), index=True)
-
-    # 🚨 [추가됨] 병합 과정에서 이 도서 객체가 주로 어느 이미지에서 추출되었는지 추적
     source_image_id = Column(String(50), ForeignKey('scan_image.image_id', ondelete='SET NULL'), nullable=True)
-
-    # 책등 좌표
     bounding_box = Column(JSONB)
 
-    # 1. AI 원본 데이터 (Gemma4가 추출한 책 제목, 청구기호 통째로 저장)
-    raw_ocr_title = Column(String(255))        # AI가 읽은 원본 제목
-    raw_ocr_call_number = Column(String(100))  # AI가 읽은 원본 청구기호
-
-    # 2. 보정된 정답 데이터 연결 (DB Master 연동)
+    raw_ocr_title = Column(String(255))
+    raw_ocr_call_number = Column(String(100))
     matched_book_id = Column(String(50), ForeignKey('book_master.book_id'), nullable=True)
 
-    # 🚨 [유지/중요] 여러 장의 사진을 중복 제거하고 병합한 후의 '해당 칸(Shelf) 전체 기준 물리적 최종 순서'
     detected_order = Column(Integer, nullable=False)
-
-    # 최종 상태 (MATCH, MISPLACED, EXTRA, UNKNOWN, PENDING)
     status = Column(String(20), nullable=False, default="PENDING")
+    
+    # 🚨 [추가됨] 프론트엔드에서 오배열 확인(조치)을 완료했는지 여부
+    is_verified = Column(Boolean, default=False)
 
-    # AI 인식 신뢰도 점수
     confidence = Column(Integer, default=0)
-
     crop_image_url = Column(String(255), nullable=True)
 
-    # 🚨 수정: 양방향 관계(Relationship) 설정 업데이트
     session = relationship("ScanSession", back_populates="results")
-    source_image = relationship("ScanImage", back_populates="results") # 추가됨
-    book = relationship("BookMaster") # 매칭된 도서 객체에 ORM으로 바로 접근 가능
-
+    source_image = relationship("ScanImage", back_populates="results")
+    book = relationship("BookMaster")
 
 # 5. Daily_Analytics (날짜별 집계 캐시 - 주간 차트용)
 class DailyAnalytics(Base):

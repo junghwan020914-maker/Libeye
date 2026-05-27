@@ -53,12 +53,6 @@ const switchFromDetailToEdit = () => {
     openEditModal(rawData);
 };
 
-// [추가] 모달을 닫을 때 상태를 초기화하는 함수
-const closeEditModal = () => {
-    showEditModal.value = false;
-    editingBook.value = null;
-    showZoomModal.value = false;
-};
 
 const goBack = () => {
     router.push('/history');
@@ -202,6 +196,87 @@ const openBookDetail = (item: any) => {
     };
 };
 
+
+const searchQuery = ref('');
+const searchResults = ref<any[]>([]);
+const isSearching = ref(false);
+let searchTimeout: any = null;
+const selectedMatchCandidate = ref<any>(null);
+
+// 디바운스(Debounce)를 이용한 실시간 검색 로직
+const onSearchInput = () => {
+    selectedMatchCandidate.value = null;
+    if (!searchQuery.value.trim()) {
+        searchResults.value = [];
+        return;
+    }
+    if (searchTimeout) clearTimeout(searchTimeout);
+    isSearching.value = true;
+
+    searchTimeout = setTimeout(async () => {
+        try {
+            const res = await fetch(`/api/v1/search/books?q=${encodeURIComponent(searchQuery.value)}`);
+            const data = await res.json();
+            searchResults.value = data.results || [];
+        } catch (e) {
+            console.error('검색 오류:', e);
+        } finally {
+            isSearching.value = false;
+        }
+    }, 400);
+};
+
+// 검색 결과 클릭 시
+const selectCandidate = (book: any) => {
+    selectedMatchCandidate.value = book;
+    searchQuery.value = book.call_number;
+};
+
+// 장서 DB 강제 매칭 처리
+const forceMatch = async () => {
+    if (!selectedMatchCandidate.value || !editingBook.value) {
+        alert('매칭할 도서를 검색하고 선택해주세요.');
+        return;
+    }
+    try {
+        await fetch(`/api/v1/sessions/${sessionId.value}/detections/${editingBook.value.detection_id}/match`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ book_id: selectedMatchCandidate.value.book_id })
+        });
+        closeEditModal();
+        window.location.reload(); // API 결과가 재계산되었으므로 새로고침하여 동기화
+    } catch (e) {
+        alert('강제 매칭 중 오류가 발생했습니다.');
+    }
+};
+
+// 조치(물리적 이동) 완료 확인 로직
+const verifyMisplacement = async () => {
+    if (!selectedBook.value) return;
+    const rawData = selectedBook.value._raw_detection;
+
+    try {
+        await fetch(`/api/v1/sessions/${sessionId.value}/detections/${rawData.detection_id}/verify`, {
+            method: 'PUT'
+        });
+        selectedBook.value = null;
+        window.location.reload();
+    } catch (e) {
+        alert('조치 완료 반영 중 오류가 발생했습니다.');
+    }
+};
+
+// 모달 종료 시 검색 상태 초기화 업데이트
+const closeEditModal = () => {
+    showEditModal.value = false;
+    editingBook.value = null;
+    searchQuery.value = '';
+    searchResults.value = [];
+    selectedMatchCandidate.value = null;
+    showZoomModal.value = false;
+};
+
 </script>
 
 <template>
@@ -241,9 +316,11 @@ const openBookDetail = (item: any) => {
                 class="bg-amber-50 border-b border-amber-300 px-4 py-2.5 flex items-start gap-2 shrink-0">
                 <span class="text-amber-500 text-base leading-none mt-0.5">⚠</span>
                 <div class="text-xs text-amber-800 leading-snug">
-                    <span class="font-bold">서가 불일치 감지</span><br/>
-                    선택한 서가(<span class="font-mono font-semibold">{{ sessionData.location_warning.selected_location_id }}</span>)와
-                    실제 스캔된 책들의 서가(<span class="font-mono font-semibold">{{ sessionData.location_warning.actual_location_id }}</span>)가 다릅니다.
+                    <span class="font-bold">서가 불일치 감지</span><br />
+                    선택한 서가(<span class="font-mono font-semibold">{{ sessionData.location_warning.selected_location_id
+                        }}</span>)와
+                    실제 스캔된 책들의 서가(<span class="font-mono font-semibold">{{
+                        sessionData.location_warning.actual_location_id }}</span>)가 다릅니다.
                     올바른 서가를 선택하고 다시 스캔해주세요.
                 </div>
             </div>
@@ -265,17 +342,16 @@ const openBookDetail = (item: any) => {
                         <template v-for="d in sessionData.detections" :key="d.detection_id">
                             <polygon
                                 v-if="d.source_image_id === img.image_id && d.status !== 'MATCH' && getPolygonPoints(d, img.image_id)"
-                                :points="getPolygonPoints(d, img.image_id)"
-                                stroke-width="2"
+                                :points="getPolygonPoints(d, img.image_id)" stroke-width="2"
                                 :stroke="d.status === 'MATCH' ? '#2E7D32' : d.status === 'MISPLACED' ? '#D32F2F' : '#F57C00'"
-                                :fill="d.status === 'MATCH' ? 'rgba(34,197,94,0.1)' : d.status === 'MISPLACED' ? 'rgba(211,47,47,0.3)' : 'rgba(245,124,0,0.3)'"
-                            />
+                                :fill="d.status === 'MATCH' ? 'rgba(34,197,94,0.1)' : d.status === 'MISPLACED' ? 'rgba(211,47,47,0.3)' : 'rgba(245,124,0,0.3)'" />
                         </template>
                     </svg>
 
                     <!-- 배지 레이어 (순서 번호 + 상태 텍스트) -->
                     <template v-for="d in sessionData.detections" :key="`badge-${d.detection_id}`">
-                        <template v-if="d.source_image_id === img.image_id && d.status !== 'MATCH' && getPolygonLabelPos(d, img.image_id)">
+                        <template
+                            v-if="d.source_image_id === img.image_id && d.status !== 'MATCH' && getPolygonLabelPos(d, img.image_id)">
                             <span
                                 class="absolute bg-stone-800 text-white text-[10px] w-5 h-5 flex items-center justify-center rounded-full font-bold shadow-md z-20"
                                 :style="{
@@ -285,12 +361,10 @@ const openBookDetail = (item: any) => {
                                 {{ d.detected_order }}
                             </span>
                             <span v-if="d.status !== 'MATCH'"
-                                class="absolute bg-white border text-[8px] px-1 rounded whitespace-nowrap z-20"
-                                :style="{
+                                class="absolute bg-white border text-[8px] px-1 rounded whitespace-nowrap z-20" :style="{
                                     left: `${getPolygonLabelPos(d, img.image_id)!.x + 24}px`,
                                     top: `${getPolygonLabelPos(d, img.image_id)!.y - 20}px`
-                                }"
-                                :class="{
+                                }" :class="{
                                     'border-[#D32F2F] text-[#D32F2F]': d.status === 'MISPLACED',
                                     'border-[#F57C00] text-[#F57C00]': d.status === 'UNKNOWN' || d.status === 'MISSING'
                                 }">
@@ -332,18 +406,24 @@ const openBookDetail = (item: any) => {
                             </div>
 
                             <div v-else-if="item.status === 'MISPLACED'" @click="openBookDetail(item)"
-                                class="bg-red-50 p-3 rounded-lg border-2 border-red-300 flex items-center justify-between cursor-pointer hover:bg-red-100 transition-colors shadow-sm">
+                                class="p-3 rounded-lg border-2 flex items-center justify-between cursor-pointer transition-colors shadow-sm"
+                                :class="item.detection?.is_verified ? 'bg-stone-50 border-stone-200 opacity-60' : 'bg-red-50 border-red-300 hover:bg-red-100'">
                                 <div class="flex items-center gap-3">
                                     <img v-if="item.detection?.crop_image_url" :src="item.detection.crop_image_url"
-                                        class="w-8 h-12 object-cover rounded shadow-sm border border-red-300" />
+                                        class="w-8 h-12 object-cover rounded shadow-sm border"
+                                        :class="item.detection?.is_verified ? 'border-stone-300' : 'border-red-300'" />
                                     <div>
-                                        <div class="text-xs font-bold text-red-900 flex items-center gap-1">
-                                            <span
+                                        <div class="text-xs font-bold flex items-center gap-1"
+                                            :class="item.detection?.is_verified ? 'text-stone-600' : 'text-red-900'">
+                                            <span v-if="item.detection?.is_verified"
+                                                class="bg-stone-500 text-white text-[9px] px-1.5 py-0.5 rounded shadow-sm">조치완료</span>
+                                            <span v-else
                                                 class="bg-red-500 text-white text-[9px] px-1.5 py-0.5 rounded shadow-sm">순서오류</span>
                                             {{ item.call_number }}
                                         </div>
-                                        <div class="text-[10px] text-red-700 mt-0.5 w-40 truncate">{{ item.title }}
-                                        </div>
+                                        <div class="text-[10px] mt-0.5 w-40 truncate"
+                                            :class="item.detection?.is_verified ? 'text-stone-500' : 'text-red-700'">{{
+                                                item.title }}</div>
                                     </div>
                                 </div>
                                 <div class="text-right flex flex-col items-end gap-1">
@@ -408,7 +488,8 @@ const openBookDetail = (item: any) => {
                                             <span class="bg-stone-500 text-white text-[8px] px-1 rounded">미인식</span> {{
                                                 d.ocr_call_number || '해독 불가' }}
                                         </div>
-                                        <div class="text-[10px] text-stone-500 mt-0.5">신뢰도 {{ Math.round(d.confidence) }}%</div>
+                                        <div class="text-[10px] text-stone-500 mt-0.5">신뢰도 {{ Math.round(d.confidence)
+                                            }}%</div>
                                     </div>
                                 </div>
                                 <button @click="openEditModal(d)"
@@ -464,7 +545,7 @@ const openBookDetail = (item: any) => {
                         <div class="flex flex-col gap-0.5">
                             <span class="text-[10px] font-bold text-stone-400">DB 장서 도서명</span>
                             <span class="font-bold text-stone-900 break-all line-clamp-1">{{ selectedBook.title
-                            }}</span>
+                                }}</span>
                         </div>
                         <div class="border-t border-stone-200/60 my-0.5"></div>
 
@@ -472,7 +553,7 @@ const openBookDetail = (item: any) => {
                             <div class="flex flex-col gap-0.5">
                                 <span class="text-[10px] font-bold text-stone-400">청구기호</span>
                                 <span class="font-semibold text-stone-800 font-mono">{{ selectedBook.call_number
-                                }}</span>
+                                    }}</span>
                             </div>
                             <div class="flex flex-col gap-0.5">
                                 <span class="text-[10px] font-bold text-stone-400">배정 서가 위치</span>
@@ -496,6 +577,12 @@ const openBookDetail = (item: any) => {
                     </div>
 
                     <div class="flex flex-col gap-2">
+                        <button v-if="selectedBook.status === 'MISPLACED' && !selectedBook._raw_detection?.is_verified"
+                            @click="verifyMisplacement" type="button"
+                            class="w-full bg-[#2E7D32] text-white font-bold py-3 rounded-xl text-xs hover:bg-green-700 transition-colors shadow-md flex justify-center items-center gap-1">
+                            ✓ 오배열 물리적 조치 완료
+                        </button>
+
                         <button @click="switchFromDetailToEdit" type="button"
                             class="w-full bg-stone-100 text-stone-600 hover:text-stone-900 border border-stone-300 font-bold py-2 rounded-xl text-[11px] transition-colors flex items-center justify-center gap-1">
                             ✏️ 인식을 잘못했나요? 수동 교정하기
@@ -503,7 +590,7 @@ const openBookDetail = (item: any) => {
 
                         <button @click="selectedBook = null"
                             class="w-full bg-stone-800 text-white font-bold py-3 rounded-xl text-xs hover:bg-stone-700 transition-colors shadow-md">
-                            확인 완료
+                            {{ selectedBook.status === 'MISPLACED' && !selectedBook._raw_detection?.is_verified ? '다음에 하기 (닫기)' : '닫기' }}
                         </button>
                     </div>
 
@@ -549,20 +636,26 @@ const openBookDetail = (item: any) => {
                     <div class="bg-stone-50 p-2.5 rounded-lg text-[10px] text-stone-600 flex flex-col gap-1 font-mono">
                         <div>🤖 <strong>AI OCR 결과:</strong> {{ editingBook?.ocr_call_number || '판독 불가' }}</div>
                         <div>🎯 <strong>추론 신뢰도:</strong> {{ editingBook ? Math.round(editingBook.confidence) : 0
-                            }}%</div>
+                        }}%</div>
                     </div>
 
                     <div class="flex flex-col gap-3">
-                        <div class="flex flex-col gap-1">
-                            <label class="text-[11px] font-bold text-stone-500">청구기호 입력</label>
-                            <input type="text" :placeholder="editingBook?.ocr_call_number || '예: 813.6 김12가'"
-                                class="border border-stone-300 rounded-xl p-3 text-xs font-mono focus:outline-none focus:border-stone-800" />
-                        </div>
-
-                        <div class="flex flex-col gap-1">
-                            <label class="text-[11px] font-bold text-stone-500">도서명 입력 (선택)</label>
-                            <input type="text" :placeholder="editingBook?.ocr_title"
+                        <div class="flex flex-col gap-1 relative">
+                            <label class="text-[11px] font-bold text-stone-500">매칭할 도서명 또는 청구기호 검색</label>
+                            <input type="text" v-model="searchQuery" @input="onSearchInput" placeholder="검색어 입력..."
                                 class="border border-stone-300 rounded-xl p-3 text-xs focus:outline-none focus:border-stone-800" />
+
+                            <div v-if="searchQuery && (isSearching || searchResults.length > 0)"
+                                class="absolute top-[60px] left-0 w-full bg-white border border-stone-200 shadow-xl rounded-lg max-h-40 overflow-y-auto z-20">
+                                <div v-if="isSearching" class="p-3 text-center text-[10px] text-stone-500">검색 중...</div>
+                                <div v-else v-for="book in searchResults" :key="book.book_id"
+                                    @click="selectCandidate(book)"
+                                    class="p-2 border-b border-stone-100 cursor-pointer hover:bg-stone-50 transition-colors"
+                                    :class="{ 'bg-green-50 border-l-4 border-green-500': selectedMatchCandidate?.book_id === book.book_id }">
+                                    <div class="font-bold text-xs text-stone-800">{{ book.call_number }}</div>
+                                    <div class="text-[10px] text-stone-500 truncate mt-0.5">{{ book.title }}</div>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -571,9 +664,10 @@ const openBookDetail = (item: any) => {
                             class="flex-1 bg-stone-100 text-stone-700 text-xs font-bold py-3.5 rounded-xl">
                             취소
                         </button>
-                        <button @click="closeEditModal"
-                            class="flex-[2] bg-stone-800 text-white text-xs font-bold py-3.5 rounded-xl shadow-md">
-                            장서 DB 강제 매칭
+                        <button @click="forceMatch" :disabled="!selectedMatchCandidate"
+                            class="flex-[2] text-white text-xs font-bold py-3.5 rounded-xl shadow-md transition-colors"
+                            :class="selectedMatchCandidate ? 'bg-stone-800 hover:bg-stone-700' : 'bg-stone-300 cursor-not-allowed'">
+                            선택한 도서로 강제 매칭
                         </button>
                     </div>
 
@@ -610,4 +704,3 @@ const openBookDetail = (item: any) => {
         </template>
     </main>
 </template>
-
