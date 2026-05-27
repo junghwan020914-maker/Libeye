@@ -226,12 +226,6 @@ const onSearchInput = () => {
     }, 400);
 };
 
-// 검색 결과 클릭 시
-const selectCandidate = (book: any) => {
-    selectedMatchCandidate.value = book;
-    searchQuery.value = book.call_number;
-};
-
 // 장서 DB 강제 매칭 처리
 const forceMatch = async () => {
     if (!selectedMatchCandidate.value || !editingBook.value) {
