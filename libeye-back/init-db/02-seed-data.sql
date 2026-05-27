@@ -1,16 +1,16 @@
 
 
 INSERT INTO Library_Master (location_id, floor, room_name, section, shelf_num, level_num, is_active) VALUES
-('LOC-A-1-1', 3, '인문과학실', 'A열', 1, 1, TRUE),
-('LOC-A-1-2', 3, '인문과학실', 'A열', 1, 2, TRUE),
+('LOC-A-1-1', 3, '인문과학실', 'A열', 1, 5, TRUE),
+('LOC-A-1-2', 3, '인문과학실', 'A열', 1, 4, TRUE),
 ('LOC-A-1-3', 3, '인문과학실', 'A열', 1, 3, TRUE),
-('LOC-A-1-4', 3, '인문과학실', 'A열', 1, 4, TRUE),
-('LOC-A-1-5', 3, '인문과학실', 'A열', 1, 5, TRUE),
-('LOC-B-1-1', 3, '인문과학실', 'B열', 1, 1, TRUE),
-('LOC-B-1-2', 3, '인문과학실', 'B열', 1, 2, TRUE),
+('LOC-A-1-4', 3, '인문과학실', 'A열', 1, 2, TRUE),
+('LOC-A-1-5', 3, '인문과학실', 'A열', 1, 1, TRUE),
+('LOC-B-1-1', 3, '인문과학실', 'B열', 1, 5, TRUE),
+('LOC-B-1-2', 3, '인문과학실', 'B열', 1, 4, TRUE),
 ('LOC-B-1-3', 3, '인문과학실', 'B열', 1, 3, TRUE),
-('LOC-B-1-4', 3, '인문과학실', 'B열', 1, 4, TRUE),
-('LOC-B-1-5', 3, '인문과학실', 'B열', 1, 5, TRUE);
+('LOC-B-1-4', 3, '인문과학실', 'B열', 1, 2, TRUE),
+('LOC-B-1-5', 3, '인문과학실', 'B열', 1, 1, TRUE);
 
 
 
