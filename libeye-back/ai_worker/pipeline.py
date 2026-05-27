@@ -118,17 +118,20 @@ def process_scan_session(session_id: str):
                     else:
                         print(f"[{session_id}] 청구기호 OCR 실패로 매칭 생략")
 
+                    polygon = None
+                    if masks is not None and len(masks.xy) > idx:
+                        polygon = masks.xy[idx].tolist()
+
                     local_results.append(
                         {
                             "source_image_id": img_record.image_id,  # 🚨 추가됨: 출처 이미지 기록
                             "bounding_box": {
-                                "x": x1,
-                                "y": y1,
-                                "w": x2 - x1,
-                                "h": y2 - y1,
+                                "polygon": polygon,
                             },
                             "raw_ocr_data": ocr_result,
                             "matched_book_id": matched.book_id if matched else None,
+                            "matched_call_number": matched.call_number if matched else None,
+                            "matched_title": matched.title if matched else None,
                             "assigned_loc_id": matched.assigned_loc_id
                             if matched
                             else None,
@@ -141,7 +144,7 @@ def process_scan_session(session_id: str):
                     )
 
             # 현재 이미지 내에서 물리적 순서(x 좌표)대로 먼저 정렬
-            local_results.sort(key=lambda r: r["bounding_box"]["x"])
+            local_results.sort(key=lambda r: r["bounding_box"]["polygon"][0][0] if r["bounding_box"]["polygon"] else 0)
 
             # 🚨 [핵심 알고리즘] 중복 제거(Deduplication) 및 병합 로직
             if global_results and local_results:
