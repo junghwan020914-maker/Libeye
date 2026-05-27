@@ -23,7 +23,7 @@ def get_history(location_id: Optional[str] = None, db: Session = Depends(get_db)
     for session in sessions:
         results = db.query(ScanResultDetail).filter(ScanResultDetail.session_id == session.session_id).all()
         total_count = len(results)
-        error_count = sum(1 for r in results if r.status not in ["MATCH", "PENDING"])
+        error_count = sum(1 for r in results if r.status not in ["MATCH", "PENDING"] and not r.is_verified)
         
         history.append({
             "session_id": session.session_id,
