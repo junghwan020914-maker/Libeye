@@ -80,7 +80,6 @@ onMounted(() => {
           </div>
           <div class="text-blue-500 font-bold">➔</div>
         </button>
-      </div>
      </div>
 
       <section class="flex flex-col gap-3 mt-2">
