@@ -49,7 +49,7 @@ onMounted(() => {
 <template>
   <main class="flex-col h-full animate-fade-in pb-20 overflow-y-auto flex">
     <header class="bg-white px-5 py-4 border-b border-stone-200 sticky top-0 z-20 flex items-center gap-3 shrink-0">
-      <img src="../assets/" alt="LIBEYE Logo" class="w-8 h-8 object-contain" />
+      <img src="../assets/logo.png" alt="LIBEYE Logo" class="w-8 h-8 object-contain" />
       <h1 class="text-base font-extrabold text-stone-900 tracking-tight">LIBEYE - Library Eye</h1>
     </header>
 
