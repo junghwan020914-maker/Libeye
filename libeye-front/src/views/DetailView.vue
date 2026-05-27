@@ -280,20 +280,25 @@ const selectCandidate = (book: any) => {
     searchResults.value = [];
 };
 
-// 책이 아닌 객체(False Positive) 무시 및 삭제 로직
+// 책이 아닌 객체(False Positive) 무시 및 삭제 로직 (상세창 및 수동교정창 공용)
 const ignoreDetection = async () => {
-    if (!selectedBook.value) return;
-    const rawData = selectedBook.value._raw_detection;
+    // 상세창이 열려있으면 selectedBook에서, 수동교정창이면 editingBook에서 ID 추출
+    const detectionId = selectedBook.value?._raw_detection?.detection_id || editingBook.value?.detection_id;
+    
+    if (!detectionId) return;
 
-    // 사용자의 실수를 방지하기 위한 확인창
     if (!confirm('이 항목을 책이 아닌 것으로 간주하고 목록에서 완전히 삭제하시겠습니까?')) return;
 
     try {
-        await fetch(`/api/v1/sessions/${sessionId.value}/detections/${rawData.detection_id}`, {
+        await fetch(`/api/v1/sessions/${sessionId.value}/detections/${detectionId}`, {
             method: 'DELETE'
         });
+        
+        // 어떤 모달이 열려있었든 모두 닫기 및 초기화
         selectedBook.value = null;
-        window.location.reload(); // 성공 시 화면 새로고침하여 바뀐 결과 동기화
+        closeEditModal();
+        
+        window.location.reload(); // 성공 시 화면 동기화
     } catch (e) {
         alert('탐지 결과 삭제 중 오류가 발생했습니다.');
     }
@@ -701,16 +706,23 @@ const ignoreDetection = async () => {
                         </div>
                     </div>
 
-                    <div class="flex gap-2 mt-2">
-                        <button @click="closeEditModal"
-                            class="flex-1 bg-stone-100 text-stone-700 text-xs font-bold py-3.5 rounded-xl">
-                            취소
+                    <div class="flex flex-col gap-2 mt-2">
+                        <button @click="ignoreDetection" type="button"
+                            class="w-full bg-red-50 text-red-600 hover:text-red-700 border border-red-200 font-bold py-2.5 rounded-xl text-xs transition-colors flex items-center justify-center gap-1 shadow-sm">
+                            🗑️ 책이 아님 (탐지 결과 삭제)
                         </button>
-                        <button @click="forceMatch" :disabled="!selectedMatchCandidate"
-                            class="flex-[2] text-white text-xs font-bold py-3.5 rounded-xl shadow-md transition-colors"
-                            :class="selectedMatchCandidate ? 'bg-stone-800 hover:bg-stone-700' : 'bg-stone-300 cursor-not-allowed'">
-                            선택한 도서로 강제 매칭
-                        </button>
+                        
+                        <div class="flex gap-2">
+                            <button @click="closeEditModal"
+                                class="flex-1 bg-stone-100 text-stone-700 text-xs font-bold py-3.5 rounded-xl">
+                                취소
+                            </button>
+                            <button @click="forceMatch" :disabled="!selectedMatchCandidate"
+                                class="flex-[2] text-white text-xs font-bold py-3.5 rounded-xl shadow-md transition-colors"
+                                :class="selectedMatchCandidate ? 'bg-stone-800 hover:bg-stone-700' : 'bg-stone-300 cursor-not-allowed'">
+                                선택한 도서로 강제 매칭
+                            </button>
+                        </div>
                     </div>
 
                 </div>
