@@ -41,6 +41,8 @@ CREATE TABLE Scan_Session (
     status VARCHAR(20) DEFAULT 'PENDING',
     lux_level INT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    -- 🚨 [추가됨] 수정 발생 시 시간을 추적하기 위한 컬럼
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     -- 세션 완료 시 파이프라인이 채워주는 집계 컬럼
     total_books INT DEFAULT 0,               -- YOLO가 탐지한 총 책 권수
     misplaced_count INT DEFAULT 0,           -- 오배열 책 수 (MISPLACED)
@@ -72,7 +74,9 @@ CREATE TABLE Scan_Result_Detail (
     confidence DECIMAL(5,2),
     bounding_box JSONB,
     detected_order INT NOT NULL,
-    status VARCHAR(20) NOT NULL
+    status VARCHAR(20) NOT NULL,
+    -- 🚨 [추가됨] 프론트엔드에서 오배열 확인(조치) 완료 여부
+    is_verified BOOLEAN DEFAULT FALSE
 );
 
 -- 3.4 수동 수정 이력 테이블 (Manual_Correction)

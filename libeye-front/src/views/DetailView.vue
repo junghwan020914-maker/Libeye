@@ -277,6 +277,15 @@ const closeEditModal = () => {
     showZoomModal.value = false;
 };
 
+// 검색 결과 클릭 시
+const selectCandidate = (book: any) => {
+    selectedMatchCandidate.value = book;
+    searchQuery.value = book.call_number;
+    
+    // 🚨 [추가됨] 선택을 완료하면 목록을 닫기 위해 배열을 비웁니다.
+    searchResults.value = [];
+};
+
 </script>
 
 <template>
@@ -640,13 +649,12 @@ const closeEditModal = () => {
                     </div>
 
                     <div class="flex flex-col gap-3">
-                        <div class="flex flex-col gap-1 relative">
-                            <label class="text-[11px] font-bold text-stone-500">매칭할 도서명 또는 청구기호 검색</label>
+                        <div class="flex flex-col gap-1"> <label class="text-[11px] font-bold text-stone-500">매칭할 도서명 또는 청구기호 검색</label>
                             <input type="text" v-model="searchQuery" @input="onSearchInput" placeholder="검색어 입력..."
                                 class="border border-stone-300 rounded-xl p-3 text-xs focus:outline-none focus:border-stone-800" />
 
                             <div v-if="searchQuery && (isSearching || searchResults.length > 0)"
-                                class="absolute top-[60px] left-0 w-full bg-white border border-stone-200 shadow-xl rounded-lg max-h-40 overflow-y-auto z-20">
+                                class="w-full bg-white border border-stone-200 shadow-sm rounded-lg max-h-40 overflow-y-auto mt-1">
                                 <div v-if="isSearching" class="p-3 text-center text-[10px] text-stone-500">검색 중...</div>
                                 <div v-else v-for="book in searchResults" :key="book.book_id"
                                     @click="selectCandidate(book)"
