@@ -275,7 +275,7 @@ const closeEditModal = () => {
 const selectCandidate = (book: any) => {
     selectedMatchCandidate.value = book;
     searchQuery.value = book.call_number;
-    
+
     // 🚨 [추가됨] 선택을 완료하면 목록을 닫기 위해 배열을 비웁니다.
     searchResults.value = [];
 };
@@ -356,7 +356,8 @@ const selectCandidate = (book: any) => {
                         <template
                             v-if="d.source_image_id === img.image_id && d.status !== 'MATCH' && getPolygonLabelPos(d, img.image_id)">
                             <span
-                                class="absolute bg-stone-800 text-white text-[10px] w-5 h-5 flex items-center justify-center rounded-full font-bold shadow-md z-20"
+                                class="absolute text-white text-[10px] w-5 h-5 flex items-center justify-center rounded-full font-bold shadow-md z-20"
+                                :class="(d.status === 'MISPLACED' && d.is_verified) ? 'bg-[#2E7D32]' : 'bg-stone-800'"
                                 :style="{
                                     left: `${getPolygonLabelPos(d, img.image_id)!.x}px`,
                                     top: `${getPolygonLabelPos(d, img.image_id)!.y - 24}px`
@@ -368,10 +369,12 @@ const selectCandidate = (book: any) => {
                                     left: `${getPolygonLabelPos(d, img.image_id)!.x + 24}px`,
                                     top: `${getPolygonLabelPos(d, img.image_id)!.y - 20}px`
                                 }" :class="{
-                                    'border-[#D32F2F] text-[#D32F2F]': d.status === 'MISPLACED',
-                                    'border-[#F57C00] text-[#F57C00]': d.status === 'UNKNOWN' || d.status === 'MISSING'
-                                }">
-                                {{ d.status === 'MISPLACED' ? '오배열' : '확인요망' }}
+                'border-[#2E7D32] text-[#2E7D32]': d.status === 'MISPLACED' && d.is_verified,
+                'border-[#D32F2F] text-[#D32F2F]': d.status === 'MISPLACED' && !d.is_verified,
+                'border-[#F57C00] text-[#F57C00]': d.status === 'UNKNOWN' || d.status === 'MISSING'
+            }">
+                                {{ d.status === 'MISPLACED' && d.is_verified ? '제자리-조치완료' : d.status === 'MISPLACED' ?
+                                '오배열' : '확인요망' }}
                             </span>
                         </template>
                     </template>
@@ -409,27 +412,34 @@ const selectCandidate = (book: any) => {
                             </div>
 
                             <div v-else-if="item.status === 'MISPLACED'" @click="openBookDetail(item)"
-                                class="p-3 rounded-lg border-2 flex items-center justify-between cursor-pointer transition-colors shadow-sm"
-                                :class="item.detection?.is_verified ? 'bg-stone-50 border-stone-200 opacity-60' : 'bg-red-50 border-red-300 hover:bg-red-100'">
+                                class="p-3 rounded-lg border flex items-center justify-between cursor-pointer transition-colors shadow-sm"
+                                :class="item.detection?.is_verified ? 'bg-white border-stone-200 hover:bg-stone-50' : 'border-2 bg-red-50 border-red-300 hover:bg-red-100'">
+
                                 <div class="flex items-center gap-3">
                                     <img v-if="item.detection?.crop_image_url" :src="item.detection.crop_image_url"
                                         class="w-8 h-12 object-cover rounded shadow-sm border"
-                                        :class="item.detection?.is_verified ? 'border-stone-300' : 'border-red-300'" />
+                                        :class="item.detection?.is_verified ? 'border-stone-200 bg-stone-100' : 'border-red-300'" />
+                                    <div v-else
+                                        class="w-8 h-12 rounded border flex items-center justify-center text-[10px]"
+                                        :class="item.detection?.is_verified ? 'bg-stone-100 border-stone-200 text-stone-400' : 'bg-red-100 border-red-300 text-red-400'">
+                                        {{ item.detection?.is_verified ? '정상' : '오류' }}</div>
+
                                     <div>
                                         <div class="text-xs font-bold flex items-center gap-1"
-                                            :class="item.detection?.is_verified ? 'text-stone-600' : 'text-red-900'">
-                                            <span v-if="item.detection?.is_verified"
-                                                class="bg-stone-500 text-white text-[9px] px-1.5 py-0.5 rounded shadow-sm">조치완료</span>
-                                            <span v-else
+                                            :class="item.detection?.is_verified ? 'text-stone-800' : 'text-red-900'">
+                                            <span v-if="!item.detection?.is_verified"
                                                 class="bg-red-500 text-white text-[9px] px-1.5 py-0.5 rounded shadow-sm">순서오류</span>
                                             {{ item.call_number }}
                                         </div>
-                                        <div class="text-[10px] mt-0.5 w-40 truncate"
-                                            :class="item.detection?.is_verified ? 'text-stone-500' : 'text-red-700'">{{
-                                                item.title }}</div>
+                                        <div class="text-[10px] mt-0.5 truncate"
+                                            :class="item.detection?.is_verified ? 'text-stone-500 w-48' : 'text-red-700 w-40'">
+                                            {{ item.title }}</div>
                                     </div>
                                 </div>
-                                <div class="text-right flex flex-col items-end gap-1">
+
+                                <span v-if="item.detection?.is_verified"
+                                    class="text-[10px] font-bold text-green-600 bg-green-50 px-2 py-1 rounded">제자리-조치완료</span>
+                                <div v-else class="text-right flex flex-col items-end gap-1">
                                     <span class="text-[10px] text-stone-400">자세히 보기 ❯</span>
                                 </div>
                             </div>
@@ -516,6 +526,9 @@ const selectCandidate = (book: any) => {
                                 <span v-if="selectedBook.status === 'MATCH'"
                                     class="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded-full">정상
                                     배치</span>
+                                <span
+                                    v-else-if="selectedBook.status === 'MISPLACED' && selectedBook._raw_detection?.is_verified"
+                                    class="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded-full">제자리-조치완료</span>
                                 <span v-else-if="selectedBook.status === 'MISPLACED'"
                                     class="text-[10px] font-bold bg-red-100 text-red-700 px-2 py-0.5 rounded-full">순서
                                     오류</span>
@@ -567,13 +580,13 @@ const selectCandidate = (book: any) => {
 
                         <div class="grid grid-cols-2 gap-2">
                             <div class="flex flex-col gap-0.5">
-                                <span class="text-[10px] font-bold text-stone-400">원래 정위치 순서</span>
+                                <span class="text-[10px] font-bold text-stone-400">서가 정위치 순서(Full 상태에서)</span>
                                 <span class="font-extrabold text-green-600">{{ selectedBook.expected_order }}번째</span>
                             </div>
                             <div class="flex flex-col gap-0.5">
                                 <span class="text-[10px] font-bold text-stone-400">현재 탐지된 순서</span>
                                 <span class="font-extrabold"
-                                    :class="selectedBook.status === 'MISPLACED' ? 'text-red-500' : 'text-stone-600'">{{
+                                    :class="(selectedBook.status === 'MISPLACED' && !selectedBook._raw_detection?.is_verified) ? 'text-red-500' : 'text-stone-600'">{{
                                         selectedBook.detected_order }}번째</span>
                             </div>
                         </div>
@@ -593,7 +606,7 @@ const selectCandidate = (book: any) => {
 
                         <button @click="selectedBook = null"
                             class="w-full bg-stone-800 text-white font-bold py-3 rounded-xl text-xs hover:bg-stone-700 transition-colors shadow-md">
-                            {{ selectedBook.status === 'MISPLACED' && !selectedBook._raw_detection?.is_verified ? '다음에 하기 (닫기)' : '닫기' }}
+                            {{ selectedBook.status === 'MISPLACED' && !selectedBook._raw_detection?.is_verified ? '다음에 하기(닫기)' : '닫기' }}
                         </button>
                     </div>
 
@@ -643,7 +656,9 @@ const selectCandidate = (book: any) => {
                     </div>
 
                     <div class="flex flex-col gap-3">
-                        <div class="flex flex-col gap-1"> <label class="text-[11px] font-bold text-stone-500">매칭할 도서명 또는 청구기호 검색</label>
+                        <div class="flex flex-col gap-1"> <label class="text-[11px] font-bold text-stone-500">매칭할 도서명 또는
+                                청구기호
+                                검색</label>
                             <input type="text" v-model="searchQuery" @input="onSearchInput" placeholder="검색어 입력..."
                                 class="border border-stone-300 rounded-xl p-3 text-xs focus:outline-none focus:border-stone-800" />
 
