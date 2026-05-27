@@ -251,7 +251,7 @@ const openBookDetail = (item: any) => {
                     <svg class="absolute inset-0 w-full h-full pointer-events-none z-10">
                         <template v-for="d in sessionData.detections" :key="d.detection_id">
                             <polygon
-                                v-if="d.source_image_id === img.image_id && getPolygonPoints(d, img.image_id)"
+                                v-if="d.source_image_id === img.image_id && d.status !== 'MATCH' && getPolygonPoints(d, img.image_id)"
                                 :points="getPolygonPoints(d, img.image_id)"
                                 stroke-width="2"
                                 :stroke="d.status === 'MATCH' ? '#2E7D32' : d.status === 'MISPLACED' ? '#D32F2F' : '#F57C00'"
@@ -262,7 +262,7 @@ const openBookDetail = (item: any) => {
 
                     <!-- 배지 레이어 (순서 번호 + 상태 텍스트) -->
                     <template v-for="d in sessionData.detections" :key="`badge-${d.detection_id}`">
-                        <template v-if="d.source_image_id === img.image_id && getPolygonLabelPos(d, img.image_id)">
+                        <template v-if="d.source_image_id === img.image_id && d.status !== 'MATCH' && getPolygonLabelPos(d, img.image_id)">
                             <span
                                 class="absolute bg-stone-800 text-white text-[10px] w-5 h-5 flex items-center justify-center rounded-full font-bold shadow-md z-20"
                                 :style="{
