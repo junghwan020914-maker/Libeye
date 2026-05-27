@@ -1,6 +1,6 @@
 import base64
 import cv2
-
+import json
 from celery import Celery
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -220,20 +220,22 @@ def process_scan_session(session_id: str):
         for idx, result in enumerate(final_results):
             ocr = result.get("raw_ocr_data", {})
 
+            # 🚨 [수정됨] 논리형(bool) 등이 들어올 수 있으므로 str()로 확실히 변환 후 슬라이싱
             raw_title = ocr.get("title", "")
             if raw_title:
-                raw_title = raw_title[:255]
+                raw_title = str(raw_title)[:255]
 
             raw_call_number = ocr.get("call_number", "")
             if raw_call_number:
-                raw_call_number = raw_call_number[:100]
+                raw_call_number = str(raw_call_number)[:100]
 
             db.add(
                 ScanResultDetail(
                     detection_id=f"{session_id}-det-{idx}",
                     session_id=session_id,
                     source_image_id=result.get("source_image_id"),
-                    bounding_box=result["bounding_box"],
+                    # 🚨 [이전 오류 수정] 파이썬 딕셔너리를 JSON 문자열로 변환 (파일 상단에 import json 필요)
+                    bounding_box=json.dumps(result.get("bounding_box", {})),
                     raw_ocr_title=raw_title,
                     raw_ocr_call_number=raw_call_number,
                     matched_book_id=result["matched_book_id"],
