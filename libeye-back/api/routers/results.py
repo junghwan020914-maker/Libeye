@@ -95,30 +95,6 @@ async def get_scan_results(session_id: str, db: Session = Depends(get_db)):
             "confidence": r.confidence
         })
 
-
-    # 🚨 수정: 병합 후 최종 산출된 물리적 순서(detected_order) 기준으로 정렬하여 결과 반환
-    results = db.query(ScanResultDetail).filter(ScanResultDetail.session_id == session_id).order_by(ScanResultDetail.detected_order).all()
-
-    detections = []
-    for r in results:
-        book_info = r.book
-        detections.append({
-            "detection_id": r.detection_id,
-            # 🚨 추가됨: 프론트엔드에서 어느 이미지 조각의 결과인지 식별하기 위함
-            "source_image_id": r.source_image_id,
-            "detected_order": r.detected_order,
-            "bounding_box": r.bounding_box,
-            "ocr_title": r.raw_ocr_title,
-            "ocr_call_number": r.raw_ocr_call_number,
-            "status": r.status,
-            "matched_book_id": r.matched_book_id,
-            "matched_call_number": book_info.call_number if book_info else None,  # 🚨 추가됨: 매칭된 도서 청구기호
-            "matched_title": book_info.title if book_info else None,              # 🚨 추가됨: 매칭된 도서 제목
-            # 상대 경로 반환 → Vite 프록시가 자동으로 백엔드로 전달
-            "crop_image_url": _to_proxy_path(r.crop_image_url),
-            "confidence": r.confidence
-        })
-    
     location_warning = (
         {
             "selected_location_id": session_info.location_id,
