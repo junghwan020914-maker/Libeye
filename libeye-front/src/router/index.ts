@@ -51,6 +51,17 @@ const router = createRouter({
       name: 'guide',
       component: GuideView
     }
+    // 신규 북카트 라우트 추가
+    {
+      path: '/cart-scan',
+      name: 'CartScan',
+      component: CartScanView
+    },
+    {
+      path: '/cart-result/:id',
+      name: 'CartResult',
+      component: CartResultView
+    }
   ]
 })
 
