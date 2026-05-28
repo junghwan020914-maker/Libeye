@@ -41,6 +41,25 @@ const clearSearch = () => {
   hasSearched.value = false;
 };
 
+// 🚀 추가됨: ISO 타임스탬프를 읽기 좋은 한국 시간 형식(YYYY-MM-DD HH:mm)으로 포맷팅
+const formatDateTime = (isoString: string) => {
+  if (!isoString) return '';
+  
+  const date = new Date(isoString);
+  // 올바른 날짜 형식이 아닐 경우 원본 반환
+  if (isNaN(date.getTime())) return isoString;
+
+  const pad = (num: number) => String(num).padStart(2, '0');
+  
+  const year = date.getFullYear();
+  const month = pad(date.getMonth() + 1);
+  const day = pad(date.getDate());
+  const hours = pad(date.getHours());
+  const minutes = pad(date.getMinutes());
+
+  return `${year}-${month}-${day} ${hours}:${minutes}`;
+};
+
 onMounted(() => {
   // Removed charts for simpler UI
 });
@@ -156,9 +175,9 @@ onMounted(() => {
                 <div v-if="book.last_seen_location && book.last_seen_time" 
                   class="flex items-center justify-between text-[10px] text-stone-400 pt-1.5 border-t border-stone-200/50 px-0.5">
                   <span class="flex items-center gap-1">
-                    <span>⏱️ 최근 발견 시간</span>
+                    <span>⏱️ 최종 확인</span>
                   </span>
-                  <span class="font-medium text-stone-500">{{ book.last_seen_time }}</span>
+                  <span class="font-medium text-stone-500">{{ formatDateTime(book.last_seen_time) }}</span>
                 </div>
               </div>
 
