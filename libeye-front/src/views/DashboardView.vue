@@ -86,57 +86,82 @@ onMounted(() => {
       </div>
 
       <section class="flex flex-col gap-3 mt-2">
-        <h3 class="font-bold text-stone-800 text-sm flex items-center justify-between">
-          <span>도서 위치 추적</span>
+        <div class="flex items-center justify-between px-1">
+          <h3 class="font-bold text-stone-800 text-sm">도서 위치 추적</h3>
           <span v-if="isSearching" class="text-xs text-stone-500 animate-pulse">검색 중...</span>
-        </h3>
-
-        <div class="relative">
-          <input v-model="searchQuery" @keyup.enter="performSearch" type="text" placeholder="도서명 또는 청구기호 검색"
-            class="w-full bg-white border border-stone-200 rounded-xl p-3 pl-10 pr-10 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-stone-800 transition-all" />
-          <button @click="performSearch"
-            class="absolute left-3 top-3 text-stone-400 hover:text-stone-700 transition-colors">
-            🔍
-          </button>
-
-          <button v-if="searchQuery || hasSearched" @click="clearSearch"
-            class="absolute right-3 top-3 text-stone-400 hover:text-stone-700 transition-colors w-6 h-6 flex items-center justify-center rounded-full hover:bg-stone-100">
-            ✕
-          </button>
         </div>
 
-        <div v-if="searchResults.length > 0" class="flex flex-col gap-3 mt-2 pb-4">
-          <div v-for="book in searchResults" :key="book.book_id"
-            class="bg-white p-4 rounded-xl border border-stone-200 shadow-sm flex flex-col gap-2 transition-all hover:border-stone-300">
-            <div>
-              <div class="font-bold text-stone-800 text-sm break-keep">{{ book.title }}</div>
-              <div class="text-xs text-stone-500 mt-1">청구기호: {{ book.call_number }}</div>
-            </div>
+        <div class="bg-stone-50 border border-stone-200 rounded-2xl p-4 shadow-sm flex flex-col gap-4">
+          
+          <div class="relative">
+            <input v-model="searchQuery" @keyup.enter="performSearch" type="text" placeholder="도서명 또는 청구기호 검색"
+              class="w-full bg-white border border-stone-200 rounded-xl p-3 pl-10 pr-10 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-stone-800 transition-all" />
+            <button @click="performSearch"
+              class="absolute left-3 top-3 text-stone-400 hover:text-stone-700 transition-colors">
+              🔍
+            </button>
+            <button v-if="searchQuery || hasSearched" @click="clearSearch"
+              class="absolute right-3 top-2.5 text-stone-400 hover:text-stone-700 transition-colors w-7 h-7 flex items-center justify-center rounded-full hover:bg-stone-100">
+              ✕
+            </button>
+          </div>
 
-            <div class="flex flex-col gap-1 mt-2 pt-2 border-t border-stone-100 text-xs">
-              <div class="flex justify-between items-center">
-                <span class="text-stone-500">원래 위치:</span>
-                <span class="font-semibold text-stone-800 bg-stone-100 px-2 py-1 rounded">{{ book.assigned_location ||
-                  '미지정' }}</span>
+          <div v-if="searchResults.length > 0" class="flex flex-col gap-3">
+            <div v-for="book in searchResults" :key="book.book_id"
+              class="bg-white rounded-xl border border-stone-200/80 shadow-sm flex flex-col overflow-hidden transition-all duration-200 hover:shadow-md hover:border-stone-300 relative"
+              :class="[
+                !book.last_seen_location ? 'border-l-4 border-l-stone-300' :
+                  (book.assigned_location !== book.last_seen_location ? 'border-l-4 border-l-red-500' : 'border-l-4 border-l-emerald-500')
+              ]">
+              
+              <div class="p-3.5 pb-2.5 flex flex-col gap-2">
+                <div class="flex items-start justify-between gap-3">
+                  <span class="font-bold text-stone-900 text-sm leading-snug break-keep flex-1">
+                    {{ book.title }}
+                  </span>
+                  <span v-if="book.last_seen_location && book.assigned_location !== book.last_seen_location" 
+                    class="text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-md border border-red-100 shrink-0">
+                    위치 오차
+                  </span>
+                  <span v-else-if="book.last_seen_location" 
+                    class="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100 shrink-0">
+                    정상 위치
+                  </span>
+                </div>
+                
+                <div class="inline-flex items-center self-start bg-stone-100 text-stone-600 text-[11px] px-2 py-0.5 rounded-md border border-stone-200/60 font-medium">
+                  📋 {{ book.call_number }}
+                </div>
               </div>
-              <div class="flex justify-between items-center">
-                <span class="text-stone-500">최근 발견 위치:</span>
-                <span class="font-semibold px-2 py-1 rounded" :class="[
-                  !book.last_seen_location ? 'text-stone-400 bg-stone-50' :
-                    (book.assigned_location !== book.last_seen_location ? 'text-red-600 bg-red-50 border border-red-100' : 'text-emerald-600 bg-emerald-50')
-                ]">
-                  {{ book.last_seen_location || '스캔 기록 없음' }}
-                </span>
+
+              <div class="px-3.5 py-2.5 bg-stone-50/60 border-t border-stone-100 grid grid-cols-2 gap-2 text-xs">
+                <div class="flex flex-col gap-1">
+                  <span class="text-stone-400 text-[10px] font-medium">원래 위치</span>
+                  <span class="font-semibold text-stone-700 bg-white border border-stone-200/60 px-2 py-1 rounded-lg inline-block truncate text-center">
+                    {{ book.assigned_location || '미지정' }}
+                  </span>
+                </div>
+                <div class="flex flex-col gap-1">
+                  <span class="text-stone-400 text-[10px] font-medium">최근 발견 위치</span>
+                  <span class="font-semibold px-2 py-1 rounded-lg inline-block truncate text-center border" :class="[
+                    !book.last_seen_location ? 'text-stone-400 bg-white border-stone-200/60' :
+                      (book.assigned_location !== book.last_seen_location ? 'text-red-600 bg-red-50/80 border-red-200' : 'text-emerald-600 bg-emerald-50/80 border-emerald-200')
+                  ]">
+                    {{ book.last_seen_location || '스캔 없음' }}
+                  </span>
+                </div>
               </div>
+
             </div>
           </div>
-        </div>
 
-        <div v-else-if="hasSearched && !isSearching"
-          class="bg-stone-50 border border-stone-200 rounded-xl p-6 text-center mt-2">
-          <div class="text-2xl mb-2">📚</div>
-          <div class="text-stone-600 text-sm font-medium">검색 결과가 없습니다.</div>
-          <div class="text-stone-400 text-xs mt-1">다른 검색어를 입력해 보세요.</div>
+          <div v-else-if="hasSearched && !isSearching"
+            class="bg-white/60 border border-stone-200/60 rounded-xl p-6 text-center">
+            <div class="text-2xl mb-2">📚</div>
+            <div class="text-stone-600 text-sm font-medium">검색 결과가 없습니다.</div>
+            <div class="text-stone-400 text-xs mt-1">다른 검색어를 입력해 보세요.</div>
+          </div>
+
         </div>
       </section>
 
