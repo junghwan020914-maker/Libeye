@@ -30,11 +30,11 @@ def search_books(
     
     for book in books:
         # 2. 해당 도서(book_id)가 마지막으로 스캔된 세션 기록 찾기
-        # ScanResultDetail과 ScanSession을 조인하여 가장 최신 세션(created_at 내림차순) 1개를 가져옴
-        last_seen_record = db.query(ScanSession.location_id, ScanSession.created_at)\
+        # ScanResultDetail과 ScanSession을 조인하여 가장 최신 변경된 세션(updated_at 내림차순) 1개를 가져옴
+        last_seen_record = db.query(ScanSession.location_id, ScanSession.updated_at)\
             .join(ScanResultDetail, ScanResultDetail.session_id == ScanSession.session_id)\
             .filter(ScanResultDetail.matched_book_id == book.book_id)\
-            .order_by(desc(ScanSession.created_at))\
+            .order_by(desc(ScanSession.updated_at))\
             .first()
 
         results.append({
@@ -43,7 +43,7 @@ def search_books(
             "call_number": book.call_number,
             "assigned_location": book.assigned_loc_id,
             "last_seen_location": last_seen_record.location_id if last_seen_record else None,
-            "last_seen_time": last_seen_record.created_at if last_seen_record else None
+            "last_seen_time": last_seen_record.updated_at if last_seen_record else None
         })
 
     return {"results": results}

@@ -87,7 +87,7 @@ onMounted(() => {
 
       <section class="flex flex-col gap-3 mt-2">
         <div class="flex items-center justify-between px-1">
-          <h3 class="font-bold text-stone-800 text-sm">도서 위치 추적</h3>
+          <h3 class="font-bold text-stone-800 text-sm">도서 위치 찾기</h3>
           <span v-if="isSearching" class="text-xs text-stone-500 animate-pulse">검색 중...</span>
         </div>
 
@@ -121,7 +121,7 @@ onMounted(() => {
                   </span>
                   <span v-if="book.last_seen_location && book.assigned_location !== book.last_seen_location" 
                     class="text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-md border border-red-100 shrink-0">
-                    위치 오차
+                    위치 다름
                   </span>
                   <span v-else-if="book.last_seen_location" 
                     class="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100 shrink-0">
@@ -134,21 +134,31 @@ onMounted(() => {
                 </div>
               </div>
 
-              <div class="px-3.5 py-2.5 bg-stone-50/60 border-t border-stone-100 grid grid-cols-2 gap-2 text-xs">
-                <div class="flex flex-col gap-1">
-                  <span class="text-stone-400 text-[10px] font-medium">원래 위치</span>
-                  <span class="font-semibold text-stone-700 bg-white border border-stone-200/60 px-2 py-1 rounded-lg inline-block truncate text-center">
-                    {{ book.assigned_location || '미지정' }}
-                  </span>
+              <div class="px-3.5 py-2.5 bg-stone-50/60 border-t border-stone-100 flex flex-col gap-2 text-xs">
+                <div class="grid grid-cols-2 gap-2">
+                  <div class="flex flex-col gap-1">
+                    <span class="text-stone-400 text-[10px] font-medium">원래 위치</span>
+                    <span class="font-semibold text-stone-700 bg-white border border-stone-200/60 px-2 py-1 rounded-lg inline-block truncate text-center">
+                      {{ book.assigned_location || '미지정' }}
+                    </span>
+                  </div>
+                  <div class="flex flex-col gap-1">
+                    <span class="text-stone-400 text-[10px] font-medium">최근 발견 위치</span>
+                    <span class="font-semibold px-2 py-1 rounded-lg inline-block truncate text-center border" :class="[
+                      !book.last_seen_location ? 'text-stone-400 bg-white border-stone-200/60' :
+                        (book.assigned_location !== book.last_seen_location ? 'text-red-600 bg-red-50/80 border-red-200' : 'text-emerald-600 bg-emerald-50/80 border-emerald-200')
+                    ]">
+                      {{ book.last_seen_location || '스캔 없음' }}
+                    </span>
+                  </div>
                 </div>
-                <div class="flex flex-col gap-1">
-                  <span class="text-stone-400 text-[10px] font-medium">최근 발견 위치</span>
-                  <span class="font-semibold px-2 py-1 rounded-lg inline-block truncate text-center border" :class="[
-                    !book.last_seen_location ? 'text-stone-400 bg-white border-stone-200/60' :
-                      (book.assigned_location !== book.last_seen_location ? 'text-red-600 bg-red-50/80 border-red-200' : 'text-emerald-600 bg-emerald-50/80 border-emerald-200')
-                  ]">
-                    {{ book.last_seen_location || '스캔 없음' }}
+
+                <div v-if="book.last_seen_location && book.last_seen_time" 
+                  class="flex items-center justify-between text-[10px] text-stone-400 pt-1.5 border-t border-stone-200/50 px-0.5">
+                  <span class="flex items-center gap-1">
+                    <span>⏱️ 최근 발견 시간</span>
                   </span>
+                  <span class="font-medium text-stone-500">{{ book.last_seen_time }}</span>
                 </div>
               </div>
 
