@@ -18,7 +18,41 @@ const locations = ref<any[]>([]);
 const selectedLocation = ref<string | null>(null);
 const showLocationModal = ref(true);
 
-// Location select handle
+// 💡 층/서가 레이아웃 선택을 위한 새로운 상태 변수들
+const currentSection = ref<string | null>(null); // 선택한 서가 (A, B, C...)
+const currentLevel = ref<number | null>(null);   // 선택한 단 (1, 2, 3, 4, 5)
+
+// 💡 DB에서 가져온 데이터로 가용한 서가 알파벳 목록 필터링 (예: ['A열', 'B열'])
+const availableSections = computed(() => {
+  const sections = locations.value.map(loc => loc.section);
+  return [...new Set(sections)].sort();
+});
+
+// 💡 1단부터 5단까지 역순 UI 대응을 위한 배열 (맨 위가 5단, 맨 아래가 1단)
+const levels = [5, 4, 3, 2, 1];
+
+// 💡 서가와 단이 모두 선택되면 해당하는 실제 location_id를 찾아 즉시 카메라 가동
+const handleSelect = (section: string, level: number) => {
+  currentSection.value = section;
+  currentLevel.value = level;
+
+  // 마스터 데이터에서 일치하는 구역 객체 탐색
+  const matched = locations.value.find(
+    loc => loc.section === section && loc.level_num === level
+  );
+
+  if (matched) {
+    // 찾았다면 바로 구역 ID 세팅 후 모달을 닫고 카메라 스트림 실행 (사잇단계 생략)
+    selectLocation(matched.location_id);
+  } else {
+    // 혹시 데이터 매칭 매핑이 실패했을 때를 대비한 예외 안내 fallback
+    alert(`선택하신 ${section} - ${level}단 구역 정보가 시스템에 등록되어 있지 않습니다.`);
+    currentSection.value = null;
+    currentLevel.value = null;
+  }
+};
+
+// 기존 래퍼용 구역 선택 함수 (startCamera 연동 유지)
 const selectLocation = (locationId: string) => {
   selectedLocation.value = locationId;
   showLocationModal.value = false;
@@ -437,28 +471,58 @@ onBeforeUnmount(() => {
 
 <template>
   <main class="flex-col h-full bg-black relative z-30 flex animate-fade-in select-none">
-    <div v-if="showLocationModal" class="absolute inset-0 z-[60] bg-stone-900 flex flex-col p-6 animate-fade-in">
-      <div class="flex justify-between items-center mb-6">
-        <button @click="router.push('/')" class="text-white text-2xl">◀</button>
-        <h2 class="text-white text-xl font-bold">스캔 구역 선택</h2>
-        <div class="w-6"></div>
-      </div>
-      <p class="text-stone-400 text-sm mb-4">점검을 진행할 구역을 선택해주세요.</p>
-      <div class="flex-1 overflow-y-auto flex flex-col gap-3">
-        <button 
-          v-for="loc in locations" 
-          :key="loc.location_id"
-          @click="selectLocation(loc.location_id)"
-          class="bg-stone-800 border border-stone-700 p-4 rounded-xl text-left active:bg-stone-700 transition-colors"
-        >
-          <div class="text-white font-bold">{{ loc.room_name }} - {{ loc.section }}열</div>
-          <div class="text-stone-400 text-xs mt-1">{{ loc.shelf_num }}번 서가 {{ loc.level_num }}단 (ID: {{ loc.location_id }})</div>
-        </button>
-        <div v-if="locations.length === 0" class="text-stone-500 text-center py-10">
-          구역 정보를 불러오는 중이거나 등록된 구역이 없습니다.
-        </div>
-      </div>
+    <div v-if="showLocationModal" class="absolute inset-0 z-[60] bg-stone-900 flex flex-col p-6 animate-fade-in select-none">
+  <div class="flex justify-between items-center mb-6">
+    <button @click="router.push('/')" class="text-white text-2xl active:opacity-60">◀</button>
+    <h2 class="text-white text-xl font-bold tracking-tight">점검 서가 및 단수 지정</h2>
+    <div class="w-6"></div>
+  </div>
+  
+  <p class="text-stone-400 text-xs mb-6">서가 열을 먼저 터치한 뒤, 점검할 서가 칸(단)을 선택하면 즉시 카메라가 시작됩니다.</p>
+
+  <div class="flex-1 flex gap-4 overflow-hidden min-h-0">
+    
+    <div class="w-1/3 flex flex-col gap-2.5 overflow-y-auto pr-1">
+      <div class="text-stone-500 text-[10px] font-bold tracking-widest uppercase mb-1">1. 서가 선택</div>
+      <button 
+        v-for="section in availableSections" 
+        :key="section"
+        @click="currentSection = section"
+        :class="[
+          'py-4 px-3 rounded-xl text-center font-black text-base border transition-all active:scale-95',
+          currentSection === section 
+            ? 'bg-green-600 text-white border-green-500 shadow-md shadow-green-600/20' 
+            : 'bg-stone-800 text-stone-300 border-stone-700 active:bg-stone-700'
+        ]"
+      >
+        {{ section }}
+      </button>
     </div>
+
+    <div class="flex-1 flex flex-col gap-2.5 overflow-y-auto pl-1">
+      <div class="text-stone-500 text-[10px] font-bold tracking-widest uppercase mb-1">2. 점검 단수 지정 (위->아래)</div>
+      
+      <div v-if="!currentSection" class="flex-1 border border-dashed border-stone-800 rounded-xl flex items-center justify-center text-stone-500 text-xs text-center p-4">
+        먼저 좌측에서<br>서가 열을 선택해주세요.
+      </div>
+
+      <button 
+        v-else
+        v-for="level in levels" 
+        :key="level"
+        @click="handleSelect(currentSection, level)"
+        class="bg-stone-800 hover:bg-stone-700 border border-stone-700 p-4 rounded-xl text-left flex items-center justify-between active:bg-stone-600 transition-all group"
+      >
+        <div class="flex items-center gap-3">
+          <span class="w-6 h-6 rounded-md bg-stone-900 flex items-center justify-center text-[11px] font-bold text-stone-400 group-active:text-white">
+            {{ level }}
+          </span>
+          <span class="text-white font-bold text-sm">{{ currentSection }} — {{ level }}단</span>
+        </div>
+        <span class="text-green-500 font-bold text-xs tracking-wide opacity-80 group-active:opacity-100">📸 촬영 시작</span>
+      </button>
+    </div>
+  </div>
 
     <div class="absolute top-0 w-full z-20 p-4 flex justify-between items-center bg-gradient-to-b from-black/60 to-transparent pb-10 text-white">
       <button @click="router.push('/')" class="text-2xl px-2">◀</button>
