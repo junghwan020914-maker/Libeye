@@ -522,7 +522,7 @@ onBeforeUnmount(() => {
         <span class="text-green-500 font-bold text-xs tracking-wide opacity-80 group-active:opacity-100">📸 촬영 시작</span>
       </button>
     </div>
-  </div>
+  </div> </div>
 
     <div class="absolute top-0 w-full z-20 p-4 flex justify-between items-center bg-gradient-to-b from-black/60 to-transparent pb-10 text-white">
       <button @click="router.push('/')" class="text-2xl px-2">◀</button>
