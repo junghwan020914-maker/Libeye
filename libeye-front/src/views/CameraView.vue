@@ -46,12 +46,6 @@ const isConfirming = ref(false);
 const fileInputRef = ref<HTMLInputElement | null>(null);
 const imageContainerRef = ref<HTMLDivElement | null>(null);
 
-// Portrait mode check
-const isPortrait = ref(window.matchMedia("(orientation: portrait)").matches);
-const handleOrientationChange = (e: MediaQueryListEvent) => {
-  isPortrait.value = e.matches;
-};
-
 // 💡 렌더링 및 연산을 위한 computed 크롭박스 (음수 치우침 방지)
 const cropRect = computed(() => {
   const x = Math.min(cropBox.value.x1, cropBox.value.x2);
@@ -417,9 +411,6 @@ const simulateCapture = async () => {
 onMounted(async () => {
   document.body.classList.add('camera-mode');
   enterFullScreen();
-  
-  const mq = window.matchMedia("(orientation: portrait)");
-  mq.addEventListener("change", handleOrientationChange);
 
   try {
     locations.value = await getLocations();
@@ -441,19 +432,11 @@ onBeforeUnmount(() => {
   document.body.classList.remove('camera-mode');
   exitFullScreen();
   stopCamera();
-  const mq = window.matchMedia("(orientation: portrait)");
-  mq.removeEventListener("change", handleOrientationChange);
 });
 </script>
 
 <template>
   <main class="flex-col h-full bg-black relative z-30 flex animate-fade-in select-none">
-    <div v-if="isPortrait && !isCropping && !showLocationModal" class="absolute inset-0 z-50 bg-black/90 flex flex-col items-center justify-center p-6 text-center backdrop-blur-md">
-      <div class="text-6xl mb-6 animate-pulse">📱🔄</div>
-      <h2 class="text-white text-2xl font-bold mb-4">가로 모드로 전환해주세요</h2>
-      <p class="text-stone-300 text-sm">정확한 서가 인식을 위해<br>기기를 가로로 눕혀서 촬영해야 합니다.</p>
-    </div>
-
     <div v-if="showLocationModal" class="absolute inset-0 z-[60] bg-stone-900 flex flex-col p-6 animate-fade-in">
       <div class="flex justify-between items-center mb-6">
         <button @click="router.push('/')" class="text-white text-2xl">◀</button>
