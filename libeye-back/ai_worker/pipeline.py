@@ -11,10 +11,13 @@ from service.detector import yolo_model, run_detection, crop_spine
 from service.ocr import extract_text_with_gemma
 from service.matcher import hybrid_book_matching_with_jamo, get_top_candidates
 from service.misplacement import detect_misplacements
+from timing import get_logger, StageTimer
 
 # 🚨 수정됨: ScanImage 모델 임포트 추가
 from models import ScanSession, ScanResultDetail, BookMaster, ScanImage, DailyAnalytics, AnalyticsTotal
 import cart_pipeline
+
+log = get_logger()
 
 # --- 앱 초기화 ---
 celery_app = Celery("tasks", broker=CELERY_BROKER_URL, backend=CELERY_RESULT_BACKEND)
@@ -39,6 +42,9 @@ def process_scan_session(session_id: str):
 
     # 🚨 추가됨: 모든 이미지의 분석 결과를 하나로 누적할 전역 리스트
     global_results = []
+
+    # 단계별 소요시간 측정 (다운로드/YOLO/OCR/매칭/DB저장 등)
+    timer = StageTimer(session_id)
 
     try:
         session = (
@@ -65,7 +71,8 @@ def process_scan_session(session_id: str):
 
             # 1. MinIO에서 원본 이미지 다운로드
             print(f"[{session_id}] 1. 원본 이미지 다운로드: {original_file_name}")
-            img = download_image("original-bucket", original_file_name)
+            with timer.stage("이미지 다운로드"):
+                img = download_image("original-bucket", original_file_name)
             if img is None:
                 print(
                     f"[{session_id}] 이미지 다운로드 실패 (건너뜀): {original_file_name}"
@@ -74,7 +81,8 @@ def process_scan_session(session_id: str):
 
             # 2. YOLO 탐지
             print(f"[{session_id}] 2. YOLO 탐지 ({img_record.image_id})")
-            boxes, masks = run_detection(img)
+            with timer.stage("YOLO 탐지"):
+                boxes, masks = run_detection(img)
 
             local_results = []  # 현재 이미지에서만 탐지된 결과
 
@@ -87,15 +95,17 @@ def process_scan_session(session_id: str):
                     x1, y1, x2, y2 = map(int, box.xyxy[0])
 
                     # 3. 마스크 크롭 + MinIO 업로드 (🚨수정됨: 이름 충돌 방지를 위해 image_id 추가)
-                    crop_img = crop_spine(img, box, masks, idx)
-                    crop_key = f"{session_id}_{img_record.image_id}_crop_{idx}.jpg"
-                    crop_url = upload_image("crop-bucket", crop_key, crop_img)
+                    with timer.stage("크롭+업로드"):
+                        crop_img = crop_spine(img, box, masks, idx)
+                        crop_key = f"{session_id}_{img_record.image_id}_crop_{idx}.jpg"
+                        crop_url = upload_image("crop-bucket", crop_key, crop_img)
 
                     # 4. Gemma OCR
                     _, buf = cv2.imencode(".jpg", crop_img)
                     b64 = base64.b64encode(buf).decode("utf-8")
                     print(f"[{session_id}] OCR 요청 중 (crop {idx})")
-                    ocr_result = extract_text_with_gemma(b64)
+                    with timer.stage("OCR"):
+                        ocr_result = extract_text_with_gemma(b64)
 
                     # 5. DB 하이브리드 퍼지 매칭 (기존 로직 그대로 유지)
                     raw_call_number = ocr_result.get("call_number", "")
@@ -103,19 +113,20 @@ def process_scan_session(session_id: str):
 
                     matched = None
                     if raw_call_number.strip():
-                        print(
-                            f"[{session_id}] 1차 전역 DB 검색 (청구기호: {raw_call_number})"
-                        )
-                        top_candidates = get_top_candidates(
-                            db, raw_call_number, limit=5
-                        )
+                        with timer.stage("DB 매칭"):
+                            print(
+                                f"[{session_id}] 1차 전역 DB 검색 (청구기호: {raw_call_number})"
+                            )
+                            top_candidates = get_top_candidates(
+                                db, raw_call_number, limit=5
+                            )
 
-                        print(
-                            f"[{session_id}] 2차 하이브리드 정밀 매칭 (후보 {len(top_candidates)}건)"
-                        )
-                        matched = hybrid_book_matching_with_jamo(
-                            raw_call_number, raw_title, top_candidates
-                        )
+                            print(
+                                f"[{session_id}] 2차 하이브리드 정밀 매칭 (후보 {len(top_candidates)}건)"
+                            )
+                            matched = hybrid_book_matching_with_jamo(
+                                raw_call_number, raw_title, top_candidates
+                            )
                     else:
                         print(f"[{session_id}] 청구기호 OCR 실패로 매칭 생략")
 
@@ -208,9 +219,10 @@ def process_scan_session(session_id: str):
         # 6. 병합된 전체 리스트를 통해 오배열 판별
         # location_id가 없으면 detect_misplacements 내부에서 다수결로 추론
         print(f"[{session_id}] 6. 오배열 판별 (총 {len(global_results)}권 병합됨)")
-        final_results, resolved_loc, inferred_loc = detect_misplacements(
-            global_results, session.location_id if session else None
-        )
+        with timer.stage("오배열 판별"):
+            final_results, resolved_loc, inferred_loc = detect_misplacements(
+                global_results, session.location_id if session else None
+            )
 
         # location_id가 없었던 경우 추론된 값을 세션에 저장
         if session and not session.location_id and resolved_loc:
@@ -264,6 +276,7 @@ def process_scan_session(session_id: str):
             session.total_books = total_books
             session.misplaced_count = misplaced_count
             session.unknown_count = unknown_count
+            session.elapsed_sec = timer.elapsed()
 
         # 9. DailyAnalytics upsert — 날짜별 집계 캐시 갱신 (주간 차트용)
         from datetime import date as date_type
@@ -287,15 +300,18 @@ def process_scan_session(session_id: str):
         total_row.unknown_count = (total_row.unknown_count or 0) + unknown_count
         total_row.session_count = (total_row.session_count or 0) + 1
 
-        db.commit()
+        with timer.stage("DB 저장(commit)"):
+            db.commit()
 
         print(f"[{session_id}] 파이프라인 완료")
+        timer.summary()
         return {"status": "success", "session_id": session_id}
 
     except Exception as e:
         # 🚨 [수정 2] 에러 발생 시 진행 중이던 트랜잭션 롤백
         db.rollback()
         print(f"[{session_id}] 오류 발생: {e}")
+        timer.summary()  # 실패 시점까지의 단계별 소요시간 확인용
 
         # 🚨 [수정 3] 상태를 확실하게 FAILED로 저장
         if session:
