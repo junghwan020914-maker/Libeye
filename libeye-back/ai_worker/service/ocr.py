@@ -1,14 +1,13 @@
 import json
+import time
 import requests
 
 from config import OLLAMA_API_URL, OLLAMA_MODEL_NAME
 
-# Ollama non-streaming(stream=False) 경로는 멀티모달/대형모델 추론 시
-# 응답 전체를 생성할 때까지 데이터 I/O가 멈추는데, 이 침묵 구간을 서버가
-# 죽은 연결로 간주해 간헐적으로 500 에러/hang이 발생한다.
-# stream=True로 청크를 지속 전송하면 이 문제를 회피할 수 있어
-# (커뮤니티 표준 우회법) 백엔드에서 청크를 모아 한 번에 반환한다.
-_TIMEOUT = (10, 150)  # (connect, read) — read는 청크 사이 간격 한계
+# stream=True에서 timeout은 "청크 사이 간격"만 보므로, 토큰이 계속 나오는
+# 폭주는 못 잡는다. 총 경과시간(_WALL_LIMIT)으로 한 OCR 요청의 상한을 둔다.
+_TIMEOUT = 150      # (connect/read) 청크 사이 간격 한계
+_WALL_LIMIT = 150   # 한 OCR 요청 총 허용 시간(초) — 초과 시 강제 중단
 
 _PROMPT = """
 You are a library assistant. Examine the image of the book spine.
@@ -26,9 +25,10 @@ def extract_text_with_gemma(base64_image: str) -> dict:
         "prompt": _PROMPT,
         "images": [base64_image],
         "format": "json",
-        "stream": True,  # 500/hang 회피 — 청크를 받아 아래에서 조립
+        "stream": True,
         "options": {"temperature": 0.1},
     }
+    start = time.time()
     try:
         resp = requests.post(
             OLLAMA_API_URL, json=payload, stream=True, timeout=_TIMEOUT
@@ -40,11 +40,18 @@ def extract_text_with_gemma(base64_image: str) -> dict:
 
         resp.raise_for_status()
 
-        # 스트림으로 받은 청크를 모아 완성된 응답으로 조립
+        # 스트림 청크를 모아 완성된 응답으로 조립
         response_text = ""
         for line in resp.iter_lines():
             if not line:
                 continue
+
+            # 토큰 폭주 안전망: 총 시간 초과 시 강제 중단
+            if time.time() - start > _WALL_LIMIT:
+                print(f"[Ollama] OCR 강제 중단: {_WALL_LIMIT}s 초과")
+                resp.close()
+                return {"call_number": "인식실패(시간초과)", "title": "인식실패"}
+
             chunk = json.loads(line)
             if "error" in chunk:
                 print(f"[Ollama] OCR 스트림 에러: {chunk['error']}")
@@ -56,7 +63,7 @@ def extract_text_with_gemma(base64_image: str) -> dict:
         return json.loads(response_text or "{}")
 
     except requests.exceptions.Timeout:
-        print(f"[Ollama] OCR 타임아웃 (read>{_TIMEOUT[1]}s)")
+        print(f"[Ollama] OCR 타임아웃 (>{_TIMEOUT}s)")
         return {"call_number": "인식실패(타임아웃)", "title": "인식실패"}
 
     except requests.exceptions.ConnectionError as e:
