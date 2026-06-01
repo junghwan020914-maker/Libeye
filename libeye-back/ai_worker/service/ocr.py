@@ -3,6 +3,13 @@ import requests
 
 from config import OLLAMA_API_URL, OLLAMA_MODEL_NAME
 
+# Ollama non-streaming(stream=False) 경로는 멀티모달/대형모델 추론 시
+# 응답 전체를 생성할 때까지 데이터 I/O가 멈추는데, 이 침묵 구간을 서버가
+# 죽은 연결로 간주해 간헐적으로 500 에러/hang이 발생한다.
+# stream=True로 청크를 지속 전송하면 이 문제를 회피할 수 있어
+# (커뮤니티 표준 우회법) 백엔드에서 청크를 모아 한 번에 반환한다.
+_TIMEOUT = (10, 150)  # (connect, read) — read는 청크 사이 간격 한계
+
 _PROMPT = """
 You are a library assistant. Examine the image of the book spine.
 Extract the 'call_number' (e.g., 813.6 김12가) and the 'title'.
@@ -19,27 +26,37 @@ def extract_text_with_gemma(base64_image: str) -> dict:
         "prompt": _PROMPT,
         "images": [base64_image],
         "format": "json",
-        "stream": False,
+        "stream": True,  # 500/hang 회피 — 청크를 받아 아래에서 조립
         "options": {"temperature": 0.1},
     }
     try:
-        # 26B 모델 Cold Start를 고려해 timeout 5분
-        resp = requests.post(OLLAMA_API_URL, json=payload, timeout=150)
+        resp = requests.post(
+            OLLAMA_API_URL, json=payload, stream=True, timeout=_TIMEOUT
+        )
 
         if resp.status_code == 404:
             print(f"[Ollama] '{OLLAMA_MODEL_NAME}' 모델 없음")
             return {"call_number": "인식실패(모델없음)", "title": "인식실패"}
 
         resp.raise_for_status()
-        result = resp.json()
-        eval_count    = result.get("eval_count", "?")      # 생성한 토큰 수
-        prompt_eval   = result.get("prompt_eval_count", "?")  # 입력 토큰 수
-        total_dur_ms  = round(result.get("total_duration", 0) / 1e6)  # ns → ms
-        print(f"[Ollama] 토큰: 입력={prompt_eval}, 생성={eval_count}, 소요={total_dur_ms}ms")
-        return json.loads(result.get("response", "{}"))
+
+        # 스트림으로 받은 청크를 모아 완성된 응답으로 조립
+        response_text = ""
+        for line in resp.iter_lines():
+            if not line:
+                continue
+            chunk = json.loads(line)
+            if "error" in chunk:
+                print(f"[Ollama] OCR 스트림 에러: {chunk['error']}")
+                return {"call_number": "인식실패(스트림에러)", "title": "인식실패"}
+            response_text += chunk.get("response", "")
+            if chunk.get("done"):
+                break
+
+        return json.loads(response_text or "{}")
 
     except requests.exceptions.Timeout:
-        print(f"[Ollama] OCR 타임아웃 (>{150}s)")
+        print(f"[Ollama] OCR 타임아웃 (read>{_TIMEOUT[1]}s)")
         return {"call_number": "인식실패(타임아웃)", "title": "인식실패"}
 
     except requests.exceptions.ConnectionError as e:
