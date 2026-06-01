@@ -158,12 +158,20 @@ const shelfInventory = computed(() => {
     });
 });
 
-// 2. 외계 도서 (이 서가 소속이 아닌데 발견된 책 - EXTRA, UNKNOWN)
+// 2. 외부 유입 도서 및 미인식 도서
+//    - MISPLACED + 이 서가 소속 아님: assigned_loc_id가 다른 서가 → 타 구역에서 잘못 꽂힌 책
+//    - UNKNOWN: 청구기호 인식 실패로 소속 자체를 알 수 없는 책
+//    ※ MISPLACED여도 이 서가 expected_books에 있으면 shelfInventory에서 처리됨
 const unexpectedDetections = computed(() => {
     if (!sessionData.value?.detections) return [];
 
+    const expectedBookIds = new Set(
+        (sessionData.value.expected_books ?? []).map((b: any) => b.book_id)
+    );
+
     return sessionData.value.detections.filter((d: any) =>
-        d.status === 'EXTRA' || d.status === 'UNKNOWN' || (!d.matched_book_id && d.status !== 'MISSING')
+        d.status === 'UNKNOWN' ||
+        (d.status === 'MISPLACED' && !expectedBookIds.has(d.matched_book_id))
     );
 });
 
@@ -312,7 +320,6 @@ const verifyAllActions = async () => {
     // 1. 조치 완료되지 않은 탐지 항목 카운트 (오배열 미조치, 외부도서, 미인식)
     const unverifiedDetections = sessionData.value.detections.filter(
         (d: any) => (d.status === 'MISPLACED' && !d.is_verified) ||
-            d.status === 'EXTRA' ||
             d.status === 'UNKNOWN'
     );
 
@@ -539,7 +546,7 @@ const verifyAllActions = async () => {
                     <div class="flex flex-col gap-2">
                         <template v-for="d in unexpectedDetections" :key="d.detection_id">
 
-                            <div v-if="d.status === 'EXTRA'"
+                            <div v-if="d.status === 'MISPLACED'"
                                 class="bg-orange-50 p-3 rounded-lg border border-orange-300 flex items-center justify-between shadow-sm">
                                 <div class="flex items-center gap-3" @click="openBookDetail(d)">
                                     <img v-if="d.crop_image_url" :src="d.crop_image_url"
