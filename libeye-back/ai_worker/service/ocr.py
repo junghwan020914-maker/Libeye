@@ -38,8 +38,20 @@ def extract_text_with_gemma(base64_image: str) -> dict:
         print(f"[Ollama] 토큰: 입력={prompt_eval}, 생성={eval_count}, 소요={total_dur_ms}ms")
         return json.loads(result.get("response", "{}"))
 
+    except requests.exceptions.Timeout:
+        print(f"[Ollama] OCR 타임아웃 (>{150}s)")
+        return {"call_number": "인식실패(타임아웃)", "title": "인식실패"}
+
+    except requests.exceptions.ConnectionError as e:
+        print(f"[Ollama] OCR 연결 오류: {e}")
+        return {"call_number": "인식실패(연결오류)", "title": "인식실패"}
+
+    except json.JSONDecodeError as e:
+        print(f"[Ollama] OCR 응답 JSON 파싱 실패: {e}")
+        return {"call_number": "인식실패(파싱오류)", "title": "인식실패"}
+
     except Exception as e:
-        print(f"[Ollama] OCR 오류: {e}")
+        print(f"[Ollama] OCR 예상치 못한 오류 ({type(e).__name__}): {e}")
         if hasattr(e, "response") and e.response is not None:
             print(f"  응답 내용: {e.response.text}")
-        return {"call_number": "인식실패(통신오류)", "title": "인식실패"}
+        return {"call_number": "인식실패(알수없음)", "title": "인식실패"}
