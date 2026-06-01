@@ -1,5 +1,5 @@
 # ... 기존 import 유지
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, Date
+from sqlalchemy import Column, Integer, Float, String, Boolean, ForeignKey, DateTime, Date
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -46,6 +46,7 @@ class ScanSession(Base):
     misplaced_count = Column(Integer, default=0)
     unknown_count = Column(Integer, default=0)
     inferred_location_id = Column(String(50), nullable=True)
+    elapsed_sec = Column(Float, nullable=True)
 
     images = relationship("ScanImage", back_populates="session", cascade="all, delete-orphan")
     results = relationship("ScanResultDetail", back_populates="session", cascade="all, delete-orphan")

@@ -47,7 +47,8 @@ CREATE TABLE Scan_Session (
     total_books INT DEFAULT 0,               -- YOLO가 탐지한 총 책 권수
     misplaced_count INT DEFAULT 0,           -- 오배열 책 수 (MISPLACED)
     unknown_count INT DEFAULT 0,             -- 인식 실패 수 (UNKNOWN)
-    inferred_location_id VARCHAR(50)         -- 책 다수결로 추론된 실제 서가 ID (선택한 서가와 다를 때만 저장)
+    inferred_location_id VARCHAR(50),        -- 책 다수결로 추론된 실제 서가 ID (선택한 서가와 다를 때만 저장)
+    elapsed_sec FLOAT                        -- 파이프라인 총 소요시간 (초)
 );
 
 -- 🚨 3.2 [신규 추가] 스캔 이미지 조각 테이블 (Scan_Image)
