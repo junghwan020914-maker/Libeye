@@ -123,12 +123,19 @@ def process_scan_session(session_id: str):
                     if masks is not None and len(masks.xy) > idx:
                         polygon = masks.xy[idx].tolist()
 
+                    # 정렬용 중심 x 좌표: 폴리곤이 있으면 모든 점의 x 평균, 없으면 bbox 중심
+                    if polygon:
+                        center_x = sum(p[0] for p in polygon) / len(polygon)
+                    else:
+                        center_x = (x1 + x2) / 2
+
                     local_results.append(
                         {
                             "source_image_id": img_record.image_id,  # 🚨 추가됨: 출처 이미지 기록
                             "bounding_box": {
                                 "polygon": polygon,
                             },
+                            "center_x": center_x,
                             "raw_ocr_data": ocr_result,
                             "matched_book_id": matched.book_id if matched else None,
                             "matched_call_number": matched.call_number if matched else None,
@@ -144,8 +151,8 @@ def process_scan_session(session_id: str):
                         }
                     )
 
-            # 현재 이미지 내에서 물리적 순서(x 좌표)대로 먼저 정렬
-            local_results.sort(key=lambda r: r["bounding_box"]["polygon"][0][0] if r["bounding_box"]["polygon"] else 0)
+            # 현재 이미지 내에서 물리적 순서(x 좌표)대로 먼저 정렬 — 폴리곤 전체 평균 중심 x 사용
+            local_results.sort(key=lambda r: r["center_x"])
 
             # 🚨 [핵심 알고리즘] 중복 제거(Deduplication) 및 병합 로직
             if global_results and local_results:
