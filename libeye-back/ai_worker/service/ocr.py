@@ -24,14 +24,19 @@ def extract_text_with_gemma(base64_image: str) -> dict:
     }
     try:
         # 26B 모델 Cold Start를 고려해 timeout 5분
-        resp = requests.post(OLLAMA_API_URL, json=payload, timeout=300)
+        resp = requests.post(OLLAMA_API_URL, json=payload, timeout=150)
 
         if resp.status_code == 404:
             print(f"[Ollama] '{OLLAMA_MODEL_NAME}' 모델 없음")
             return {"call_number": "인식실패(모델없음)", "title": "인식실패"}
 
         resp.raise_for_status()
-        return json.loads(resp.json().get("response", "{}"))
+        result = resp.json()
+        eval_count    = result.get("eval_count", "?")      # 생성한 토큰 수
+        prompt_eval   = result.get("prompt_eval_count", "?")  # 입력 토큰 수
+        total_dur_ms  = round(result.get("total_duration", 0) / 1e6)  # ns → ms
+        print(f"[Ollama] 토큰: 입력={prompt_eval}, 생성={eval_count}, 소요={total_dur_ms}ms")
+        return json.loads(result.get("response", "{}"))
 
     except Exception as e:
         print(f"[Ollama] OCR 오류: {e}")
