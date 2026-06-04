@@ -6,8 +6,8 @@ from sqlalchemy.orm import Session
 
 from models import BookMaster
 
-WEIGHT_CALL_NUM = 0.5
-WEIGHT_TITLE = 0.5
+WEIGHT_CALL_NUM = 0.4
+WEIGHT_TITLE = 0.6
 MATCH_THRESHOLD = 80.0
 
 def get_top_candidates(db: Session, ocr_call_number: str, limit: int = 5) -> List[BookMaster]:
