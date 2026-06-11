@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
-from database import get_db
-from models import ScanSession, ScanResultDetail, LibraryMaster
+from app.dependencies import get_db
+from app.models import ScanSession, ScanResultDetail, LibraryMaster
 
 router = APIRouter(prefix="/api/v1/map", tags=["Map"])
 

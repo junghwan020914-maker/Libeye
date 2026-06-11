@@ -1,7 +1,7 @@
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from datetime import datetime
-from database import Base
+from app.database import Base
 
 class CartSession(Base):
     __tablename__ = "cart_sessions"
@@ -10,7 +10,7 @@ class CartSession(Base):
     status = Column(String, default="PENDING")  # PENDING, PROCESSING, SUCCESS, FAILED
     image_path = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
-    
+
     items = relationship("CartItem", back_populates="session", cascade="all, delete-orphan")
 
 class CartItem(Base):

@@ -3,10 +3,9 @@ from pydantic import BaseModel # 🚨 추가
 from sqlalchemy.orm import Session
 from sqlalchemy import func # 🚨 추가
 import re
-# 수정됨: api. 접두사 제거 (컨테이너 내에서는 api 폴더 안의 파일들이 최상위 경로임)
-from database import get_db 
+from app.dependencies import get_db
 # 🚨 수정: ScanImage 모델 임포트 추가
-from models import ScanSession, ScanResultDetail, ScanImage, BookMaster
+from app.models import ScanSession, ScanResultDetail, ScanImage, BookMaster
 
 router = APIRouter(prefix="/api/v1/sessions", tags=["Results"])
 

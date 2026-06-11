@@ -2,8 +2,8 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, desc
 
-from database import get_db
-from models import BookMaster, ScanResultDetail, ScanSession
+from app.dependencies import get_db
+from app.models import BookMaster, ScanResultDetail, ScanSession
 
 router = APIRouter(prefix="/api/v1/search", tags=["Search"])
 

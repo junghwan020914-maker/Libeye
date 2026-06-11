@@ -1,9 +1,9 @@
 # ... 기존 import 유지
-from sqlalchemy import Column, Integer, Float, String, Boolean, ForeignKey, DateTime, Date
+from sqlalchemy import Column, Integer, Float, String, Boolean, ForeignKey, DateTime
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-from database import Base
+from app.database import Base
 
 # 1. Library_Master (위치/서가 마스터)
 class LibraryMaster(Base):
@@ -81,7 +81,7 @@ class ScanResultDetail(Base):
 
     detected_order = Column(Integer, nullable=False)
     status = Column(String(20), nullable=False, default="PENDING")
-    
+
     # 🚨 [추가됨] 프론트엔드에서 오배열 확인(조치)을 완료했는지 여부
     is_verified = Column(Boolean, default=False)
 
@@ -94,26 +94,3 @@ class ScanResultDetail(Base):
     session = relationship("ScanSession", back_populates="results")
     source_image = relationship("ScanImage", back_populates="results")
     book = relationship("BookMaster")
-
-# 5. Daily_Analytics (날짜별 집계 캐시 - 주간 차트용)
-class DailyAnalytics(Base):
-    __tablename__ = 'daily_analytics'
-
-    date = Column(Date, primary_key=True)
-    total_scans = Column(Integer, default=0)               # 해당 날 총 인식 책 권수
-    misplaced_count = Column(Integer, default=0)           # 오배열 수 (MISPLACED)
-    unknown_count = Column(Integer, default=0)             # 인식 실패 수 (UNKNOWN)
-    session_count = Column(Integer, default=0)             # 완료된 세션 수
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-
-
-# 6. Analytics_Total (전체 누적 집계 - 오류비율/AI성공률용, 항상 id=1 단일 행)
-class AnalyticsTotal(Base):
-    __tablename__ = 'analytics_total'
-
-    id = Column(Integer, primary_key=True, default=1)
-    total_scans = Column(Integer, default=0)               # 전체 누적 인식 책 권수
-    misplaced_count = Column(Integer, default=0)           # 전체 누적 오배열 수 (MISPLACED)
-    unknown_count = Column(Integer, default=0)             # 전체 누적 인식 실패 수 (UNKNOWN)
-    session_count = Column(Integer, default=0)             # 전체 누적 세션 수
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

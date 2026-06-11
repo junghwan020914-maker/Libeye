@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from database import get_db
-from models import DailyAnalytics, AnalyticsTotal
+from app.dependencies import get_db
+from app.models import DailyAnalytics, AnalyticsTotal
 from datetime import date, timedelta
 
 router = APIRouter(prefix="/api/v1/analytics", tags=["Analytics"])

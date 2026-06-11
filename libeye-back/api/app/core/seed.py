@@ -2,9 +2,9 @@ import os
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
-from database import Base
+from app.database import Base
 # 🚨 수정됨: 새로 생성한 ScanImage 모델을 import에 추가하여 테이블이 정상 생성되도록 함
-from models import LibraryMaster, BookMaster, ScanSession, ScanImage, ScanResultDetail
+from app.models import LibraryMaster, BookMaster, ScanSession, ScanImage, ScanResultDetail
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:capstone123@postgres:5432/capstone_db")
 
@@ -22,8 +22,9 @@ def seed_database():
             print("⚠️ 이미 초기 데이터가 존재합니다. Seeding을 건너뜁니다.")
             return
 
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        sql_file_path = os.path.join(current_dir, "seed-data.sql")
+        # 이 파일이 app/core/ 로 이동하면서 seed-data.sql은 두 단계 위(api 루트)에 위치합니다.
+        api_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        sql_file_path = os.path.join(api_root, "seed-data.sql")
         
         if not os.path.exists(sql_file_path):
             print(f"❌ SQL 파일을 찾을 수 없습니다: {sql_file_path}")

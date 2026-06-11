@@ -18,17 +18,5 @@ engine = create_engine(SQLALCHEMY_DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 # ORM 모델의 기본(Base) 클래스 생성
-# 이 Base 클래스를 models.py의 각 테이블 클래스가 상속받게 됩니다.
+# 이 Base 클래스를 app/models/ 의 각 테이블 클래스가 상속받게 됩니다.
 Base = declarative_base()
-
-def get_db():
-    """
-    FastAPI 의존성 주입(Dependency Injection)을 위한 DB 세션 제너레이터입니다.
-    API 요청이 들어올 때마다 새로운 DB 세션을 열고, 
-    요청 처리가 끝나면(예외가 발생하더라도) 안전하게 세션을 닫아줍니다.
-    """
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()

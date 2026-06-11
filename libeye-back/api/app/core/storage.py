@@ -11,6 +11,16 @@ MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "admin1234")
 # [추가] 프론트엔드(브라우저)가 접근할 외부 주소
 EXTERNAL_MINIO_ENDPOINT = "localhost:9000"
 
+# --- (구 main.py에서 이동) MinIO 내부 통신용 공용 클라이언트 ---
+# lifespan의 버킷 생성과 업로드 라우터(sessions, cart)에서 사용합니다.
+MINIO_URL = os.getenv("MINIO_URL", "http://minio:9000")
+s3_client = boto3.client(
+    's3',
+    endpoint_url=MINIO_URL,
+    aws_access_key_id="admin",
+    aws_secret_access_key="admin1234"
+)
+
 def get_s3_client(is_external=False):
     """
     is_external=True이면 브라우저용 서명을 생성하고,

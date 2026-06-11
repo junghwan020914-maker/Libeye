@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from database import get_db
-from models import LibraryMaster
+from app.dependencies import get_db
+from app.models import LibraryMaster
 
 router = APIRouter(prefix="/api/v1/locations", tags=["Locations"])
 

@@ -1,23 +1,14 @@
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from sqlalchemy.orm import Session
 import uuid
-import os
-import boto3
 
-from database import get_db
-from models_cart import CartSession, CartItem
-from worker import celery_app
+from app.dependencies import get_db
+from app.models.cart import CartSession, CartItem
+from app.core.celery_client import celery_app
+# MinIO 설정 (구 main.py와 동일한 공용 클라이언트를 core/storage에서 가져옴)
+from app.core.storage import s3_client, MINIO_URL
 
 router = APIRouter(prefix="/api/cart", tags=["Cart Sorting"])
-
-# MinIO 설정 (main.py의 설정과 동일하게 구성)
-MINIO_URL = os.getenv("MINIO_URL", "http://minio:9000")
-s3_client = boto3.client(
-    's3',
-    endpoint_url=MINIO_URL,
-    aws_access_key_id="admin",
-    aws_secret_access_key="admin1234"
-)
 
 @router.post("/upload", status_code=201)
 async def upload_cart_image(
