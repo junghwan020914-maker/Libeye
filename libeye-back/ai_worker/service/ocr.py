@@ -9,6 +9,15 @@ from config import OLLAMA_API_URL, OLLAMA_MODEL_NAME
 _TIMEOUT = 150      # (connect/read) 청크 사이 간격 한계
 _WALL_LIMIT = 150   # 한 OCR 요청 총 허용 시간(초) — 초과 시 강제 중단
 
+# format=json 모드에서 모델이 EOS를 못 내고 공백/반복 토큰을 무한 생성하는
+# 폭주가 있어 생성 토큰 수에 상한을 둔다. 정상 응답(청구기호+제목 JSON)은
+# 수십 토큰이면 충분하므로 256이면 넉넉하다.
+_NUM_PREDICT = 256
+
+# 폭주는 샘플링에 따른 확률적 현상이라 같은 이미지도 재시도하면 정상 종료할
+# 수 있다. num_predict에 걸려 잘린(done_reason=length) 경우에만 재시도한다.
+_MAX_RETRIES = 2
+
 _PROMPT = """
 You are a library assistant. Examine the image of the book spine.
 Extract the 'call_number' (e.g., 813.6 김12가) and the 'title'.
@@ -18,15 +27,29 @@ If you cannot read it, return empty strings.
 DO NOT include any extra notes, descriptions, or comments about text orientation (e.g., 'Note: Title is vertical'). Just output the exact text you see.
 """
 
+# num_predict 한도에 걸려 잘린 시도를 나타내는 센티널
+_TRUNCATED = object()
+
 
 def extract_text_with_gemma(base64_image: str) -> dict:
+    for attempt in range(_MAX_RETRIES + 1):
+        result = _request_ocr(base64_image)
+        if result is not _TRUNCATED:
+            return result
+        if attempt < _MAX_RETRIES:
+            print(f"[Ollama] OCR 재시도 ({attempt + 1}/{_MAX_RETRIES})")
+    return {"call_number": "인식실패(생성한도초과)", "title": "인식실패"}
+
+
+def _request_ocr(base64_image: str):
+    """Ollama에 OCR 1회 요청. num_predict 한도로 잘리면 _TRUNCATED를 반환한다."""
     payload = {
         "model": OLLAMA_MODEL_NAME,
         "prompt": _PROMPT,
         "images": [base64_image],
         "format": "json",
         "stream": True,
-        "options": {"temperature": 0.1},
+        "options": {"temperature": 0.1, "num_predict": _NUM_PREDICT},
     }
     start = time.time()
     try:
@@ -42,6 +65,7 @@ def extract_text_with_gemma(base64_image: str) -> dict:
 
         # 스트림 청크를 모아 완성된 응답으로 조립
         response_text = ""
+        done_reason = None
         for line in resp.iter_lines():
             if not line:
                 continue
@@ -58,7 +82,13 @@ def extract_text_with_gemma(base64_image: str) -> dict:
                 return {"call_number": "인식실패(스트림에러)", "title": "인식실패"}
             response_text += chunk.get("response", "")
             if chunk.get("done"):
+                done_reason = chunk.get("done_reason")
                 break
+
+        # 폭주로 잘린 응답은 미완성 JSON이므로 파싱하지 않고 재시도 대상으로 넘긴다
+        if done_reason == "length":
+            print(f"[Ollama] OCR 생성 한도 초과로 잘림 (num_predict={_NUM_PREDICT})")
+            return _TRUNCATED
 
         return json.loads(response_text or "{}")
 
