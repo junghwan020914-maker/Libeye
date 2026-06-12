@@ -2,6 +2,22 @@
 import { ref, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAnalysisPolling } from '../composables/useAnalysisPolling';
+import {
+    searchBooksRaw,
+    forceMatchDetection,
+    verifyDetection,
+    deleteDetection,
+    verifyAllDetections
+} from '../api/detectionAPI';
+import AnalysisLoadingOverlay from '../components/detail/AnalysisLoadingOverlay.vue';
+import LocationWarningBanner from '../components/detail/LocationWarningBanner.vue';
+import ShelfImageCarousel from '../components/detail/ShelfImageCarousel.vue';
+import ShelfInventoryList from '../components/detail/ShelfInventoryList.vue';
+import UnexpectedBookList from '../components/detail/UnexpectedBookList.vue';
+import BookDetailModal from '../components/detail/BookDetailModal.vue';
+import DetailActionBar from '../components/detail/DetailActionBar.vue';
+import ManualMatchModal from '../components/detail/ManualMatchModal.vue';
+import ImageZoomModal from '../components/detail/ImageZoomModal.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -57,84 +73,6 @@ const switchFromDetailToEdit = () => {
 const goBack = () => {
     router.push('/history');
 };
-
-// --- [추가된 핵심 로직] 이미지 해상도 비율 및 오프셋 계산 ---
-const imageDimensions = ref<Record<string, { scaleX: number, scaleY: number, offsetX: number, offsetY: number }>>({});
-
-const onImageLoad = (event: Event, imageId: string) => {
-    const img = event.target as HTMLImageElement;
-
-    // 1. 화면에 표시된 컨테이너 크기 vs 실제 원본 이미지 크기
-    const containerW = img.clientWidth;
-    const containerH = img.clientHeight;
-    const naturalW = img.naturalWidth;
-    const naturalH = img.naturalHeight;
-
-    // 2. object-contain으로 인한 스케일 비율 계산
-    const containerRatio = containerW / containerH;
-    const imageRatio = naturalW / naturalH;
-
-    let renderedW, renderedH, offsetX = 0, offsetY = 0;
-
-    if (imageRatio > containerRatio) {
-        // 이미지가 컨테이너보다 가로로 길 때 (상하 여백 발생)
-        renderedW = containerW;
-        renderedH = containerW / imageRatio;
-        offsetY = (containerH - renderedH) / 2;
-    } else {
-        // 이미지가 컨테이너보다 세로로 길 때 (좌우 여백 발생)
-        renderedH = containerH;
-        renderedW = containerH * imageRatio;
-        offsetX = (containerW - renderedW) / 2;
-    }
-
-    // 3. 변환된 스케일과 오프셋 저장
-    imageDimensions.value[imageId] = {
-        scaleX: renderedW / naturalW,
-        scaleY: renderedH / naturalH,
-        offsetX,
-        offsetY
-    };
-};
-
-// --- [추가된 핵심 로직] YOLO polygon 좌표를 SVG points 문자열로 변환 ---
-const getPolygonPoints = (detection: any, imageId: string): string => {
-    const dim = imageDimensions.value[imageId];
-    if (!dim || !detection.bounding_box) return '';
-
-    // DB에서 JSON 문자열로 넘어올 경우를 대비한 안전한 파싱
-    const box = typeof detection.bounding_box === 'string'
-        ? JSON.parse(detection.bounding_box)
-        : detection.bounding_box;
-
-    if (!box.polygon || box.polygon.length === 0) return '';
-
-    return box.polygon
-        .map(([x, y]: [number, number]) =>
-            `${dim.offsetX + x * dim.scaleX},${dim.offsetY + y * dim.scaleY}`)
-        .join(' ');
-};
-
-// polygon의 최상단-좌측 꼭짓점 위치를 반환 (배지 위치 계산용)
-const getPolygonLabelPos = (detection: any, imageId: string): { x: number, y: number } | null => {
-    const dim = imageDimensions.value[imageId];
-    if (!dim || !detection.bounding_box) return null;
-
-    const box = typeof detection.bounding_box === 'string'
-        ? JSON.parse(detection.bounding_box)
-        : detection.bounding_box;
-
-    if (!box.polygon || box.polygon.length === 0) return null;
-
-    const minX = Math.min(...box.polygon.map(([x]: [number, number]) => x));
-    const minY = Math.min(...box.polygon.map(([, y]: [number, number]) => y));
-
-    return {
-        x: dim.offsetX + minX * dim.scaleX,
-        y: dim.offsetY + minY * dim.scaleY,
-    };
-};
-
 
 // 선택된 오배열 도서의 상세 정보를 모달로 띄우기 위한 상태
 const selectedMisplaced = ref<any>(null);
@@ -223,8 +161,7 @@ const onSearchInput = () => {
 
     searchTimeout = setTimeout(async () => {
         try {
-            const res = await fetch(`/api/v1/search/books?q=${encodeURIComponent(searchQuery.value)}`);
-            const data = await res.json();
+            const data = await searchBooksRaw(searchQuery.value);
             searchResults.value = data.results || [];
         } catch (e) {
             console.error('검색 오류:', e);
@@ -241,11 +178,7 @@ const forceMatch = async () => {
         return;
     }
     try {
-        await fetch(`/api/v1/sessions/${sessionId.value}/detections/${editingBook.value.detection_id}/match`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ book_id: selectedMatchCandidate.value.book_id })
-        });
+        await forceMatchDetection(sessionId.value, editingBook.value.detection_id, selectedMatchCandidate.value.book_id);
         closeEditModal();
         window.location.reload(); // API 결과가 재계산되었으므로 새로고침하여 동기화
     } catch (e) {
@@ -259,9 +192,7 @@ const verifyMisplacement = async () => {
     const rawData = selectedBook.value._raw_detection;
 
     try {
-        await fetch(`/api/v1/sessions/${sessionId.value}/detections/${rawData.detection_id}/verify`, {
-            method: 'PUT'
-        });
+        await verifyDetection(sessionId.value, rawData.detection_id);
         selectedBook.value = null;
         window.location.reload();
     } catch (e) {
@@ -298,9 +229,7 @@ const ignoreDetection = async () => {
     if (!confirm('이 항목을 책이 아닌 것으로 간주하고 목록에서 완전히 삭제하시겠습니까?')) return;
 
     try {
-        await fetch(`/api/v1/sessions/${sessionId.value}/detections/${detectionId}`, {
-            method: 'DELETE'
-        });
+        await deleteDetection(sessionId.value, detectionId);
 
         // 어떤 모달이 열려있었든 모두 닫기 및 초기화
         selectedBook.value = null;
@@ -339,9 +268,7 @@ const verifyAllActions = async () => {
     }
 
     try {
-        await fetch(`/api/v1/sessions/${sessionId.value}/verify-all`, {
-            method: 'PUT'
-        });
+        await verifyAllDetections(sessionId.value);
         alert('모든 조치가 완료 처리되었습니다.');
         // 완료 후 목록(히스토리) 화면으로 이동
         router.push('/history');
@@ -368,12 +295,8 @@ const verifyAllActions = async () => {
         </header>
 
         <!-- Polling Loading State -->
-        <div v-if="(sessionData?.status?.toUpperCase() !== 'COMPLETED' && sessionData?.status?.toUpperCase() !== 'SUCCESS') && !isError"
-            class="flex-1 flex flex-col items-center justify-center p-6 bg-stone-900/90 text-white">
-            <div class="w-16 h-16 border-4 border-stone-600 border-t-green-500 rounded-full animate-spin mb-6"></div>
-            <h2 class="font-extrabold text-lg tracking-wide animate-pulse">Vision AI 분석 중...</h2>
-            <p class="text-stone-400 text-xs mt-2">청구기호 해독 및 배가 상태 비교</p>
-        </div>
+        <AnalysisLoadingOverlay
+            v-if="(sessionData?.status?.toUpperCase() !== 'COMPLETED' && sessionData?.status?.toUpperCase() !== 'SUCCESS') && !isError" />
 
         <!-- Error State -->
         <div v-else-if="isError" class="flex-1 flex flex-col items-center justify-center p-6">
@@ -386,435 +309,35 @@ const verifyAllActions = async () => {
         <template v-else-if="sessionData">
 
             <!-- 서가 불일치 경고 배너 -->
-            <div v-if="sessionData.location_warning"
-                class="bg-amber-50 border-b border-amber-300 px-4 py-2.5 flex items-start gap-2 shrink-0">
-                <span class="text-amber-500 text-base leading-none mt-0.5">⚠</span>
-                <div class="text-xs text-amber-800 leading-snug">
-                    <span class="font-bold">서가 불일치 감지</span><br />
-                    선택한 서가(<span class="font-mono font-semibold">{{ sessionData.location_warning.selected_location_id
-                    }}</span>)와
-                    실제 스캔된 책들의 서가(<span class="font-mono font-semibold">{{
-                        sessionData.location_warning.actual_location_id }}</span>)가 다릅니다.
-                    올바른 서가를 선택하고 다시 스캔해주세요.
-                </div>
-            </div>
+            <LocationWarningBanner v-if="sessionData.location_warning" :warning="sessionData.location_warning" />
 
-            <div
-                class="h-48 bg-stone-300 relative flex overflow-x-auto overflow-y-hidden snap-x shrink-0 shadow-inner scrollbar-hide">
-
-                <div v-if="!sessionData.images || sessionData.images.length === 0"
-                    class="absolute inset-0 flex justify-center items-center opacity-30 text-5xl w-full">📚📚📚</div>
-
-                <div v-for="img in sessionData.images" :key="img.image_id"
-                    class="relative h-full min-w-[280px] sm:min-w-[320px] flex-shrink-0 snap-center border-r-2 border-stone-800/40">
-
-                    <img :src="img.image_url" @load="(e) => onImageLoad(e, img.image_id)"
-                        class="absolute inset-0 w-full h-full object-contain opacity-50" />
-
-                    <!-- SVG polygon 오버레이 -->
-                    <svg class="absolute inset-0 w-full h-full pointer-events-none z-10">
-                        <template v-for="d in sessionData.detections" :key="d.detection_id">
-                            <polygon
-                                v-if="d.source_image_id === img.image_id && d.status !== 'MATCH' && getPolygonPoints(d, img.image_id)"
-                                :points="getPolygonPoints(d, img.image_id)" stroke-width="2"
-                                :stroke="d.status === 'MATCH' ? '#2E7D32' : d.status === 'MISPLACED' ? '#D32F2F' : '#F57C00'"
-                                :fill="d.status === 'MATCH' ? 'rgba(34,197,94,0.1)' : d.status === 'MISPLACED' ? 'rgba(211,47,47,0.3)' : 'rgba(245,124,0,0.3)'" />
-                        </template>
-                    </svg>
-
-                    <!-- 배지 레이어 (순서 번호 + 상태 텍스트) -->
-                    <template v-for="d in sessionData.detections" :key="`badge-${d.detection_id}`">
-                        <template
-                            v-if="d.source_image_id === img.image_id && d.status !== 'MATCH' && getPolygonLabelPos(d, img.image_id)">
-                            <span
-                                class="absolute text-white text-[10px] w-5 h-5 flex items-center justify-center rounded-full font-bold shadow-md z-20"
-                                :class="(d.status === 'MISPLACED' && d.is_verified) ? 'bg-[#2E7D32]' : 'bg-stone-800'"
-                                :style="{
-                                    left: `${getPolygonLabelPos(d, img.image_id)!.x}px`,
-                                    top: `${getPolygonLabelPos(d, img.image_id)!.y - 24}px`
-                                }">
-                                {{ d.detected_order }}
-                            </span>
-                            <span v-if="d.status !== 'MATCH'"
-                                class="absolute bg-white border text-[8px] px-1 rounded whitespace-nowrap z-20" :style="{
-                                    left: `${getPolygonLabelPos(d, img.image_id)!.x + 24}px`,
-                                    top: `${getPolygonLabelPos(d, img.image_id)!.y - 20}px`
-                                }" :class="{
-                                    'border-[#2E7D32] text-[#2E7D32]': d.status === 'MISPLACED' && d.is_verified,
-                                    'border-[#D32F2F] text-[#D32F2F]': d.status === 'MISPLACED' && !d.is_verified,
-                                    'border-[#F57C00] text-[#F57C00]': d.status === 'UNKNOWN' || d.status === 'MISSING'
-                                }">
-                                {{ d.status === 'MISPLACED' && d.is_verified ? '제자리-조치완료' : d.status === 'MISPLACED' ?
-                                    '오배열' : '확인요망' }}
-                            </span>
-                        </template>
-                    </template>
-                </div>
-            </div>
+            <!-- 이미지 캐러셀 + polygon 오버레이 -->
+            <ShelfImageCarousel :images="sessionData.images" :detections="sessionData.detections" />
 
             <div class="flex-1 overflow-y-auto p-4 pb-20 flex flex-col gap-6 bg-stone-100">
 
-                <section>
-                    <h3 class="text-xs font-bold text-stone-500 mb-3 ml-1 flex items-center justify-between">
-                        <span>본 서가 등록 도서 목록</span>
-                        <span class="bg-stone-300 text-stone-700 px-2 py-0.5 rounded-full text-[9px]">
-                            총 {{ shelfInventory.length }}권
-                        </span>
-                    </h3>
-                    <div class="flex flex-col gap-2">
-                        <template v-for="item in shelfInventory" :key="item.book_id">
+                <ShelfInventoryList :items="shelfInventory" @select="openBookDetail" />
 
-                            <div v-if="item.status === 'MATCH'" @click="openBookDetail(item)"
-                                class="bg-white p-3 rounded-lg border border-stone-200 flex items-center justify-between cursor-pointer hover:bg-stone-50 transition-colors shadow-sm">
-                                <div class="flex items-center gap-3">
-                                    <img v-if="item.detection?.crop_image_url" :src="item.detection.crop_image_url"
-                                        class="w-8 h-12 object-cover rounded shadow-sm border border-stone-200 bg-stone-100" />
-                                    <div v-else
-                                        class="w-8 h-12 bg-stone-100 rounded border border-stone-200 flex items-center justify-center text-[10px] text-stone-400">
-                                        정상</div>
-                                    <div>
-                                        <div class="text-xs font-bold text-stone-800">{{ item.call_number }}</div>
-                                        <div class="text-[10px] text-stone-500 mt-0.5 w-48 truncate">{{ item.title }}
-                                        </div>
-                                    </div>
-                                </div>
-                                <span
-                                    class="text-[10px] font-bold text-green-600 bg-green-50 px-2 py-1 rounded">제자리</span>
-                            </div>
-
-                            <div v-else-if="item.status === 'MISPLACED'" @click="openBookDetail(item)"
-                                class="p-3 rounded-lg border flex items-center justify-between cursor-pointer transition-colors shadow-sm"
-                                :class="item.detection?.is_verified ? 'bg-white border-stone-200 hover:bg-stone-50' : 'border-2 bg-red-50 border-red-300 hover:bg-red-100'">
-
-                                <div class="flex items-center gap-3">
-                                    <img v-if="item.detection?.crop_image_url" :src="item.detection.crop_image_url"
-                                        class="w-8 h-12 object-cover rounded shadow-sm border"
-                                        :class="item.detection?.is_verified ? 'border-stone-200 bg-stone-100' : 'border-red-300'" />
-                                    <div v-else
-                                        class="w-8 h-12 rounded border flex items-center justify-center text-[10px]"
-                                        :class="item.detection?.is_verified ? 'bg-stone-100 border-stone-200 text-stone-400' : 'bg-red-100 border-red-300 text-red-400'">
-                                        {{ item.detection?.is_verified ? '정상' : '오류' }}</div>
-
-                                    <div>
-                                        <div class="text-xs font-bold flex items-center gap-1"
-                                            :class="item.detection?.is_verified ? 'text-stone-800' : 'text-red-900'">
-                                            <span v-if="!item.detection?.is_verified"
-                                                class="bg-red-500 text-white text-[9px] px-1.5 py-0.5 rounded shadow-sm">순서오류</span>
-                                            {{ item.call_number }}
-                                        </div>
-                                        <div class="text-[10px] mt-0.5 truncate"
-                                            :class="item.detection?.is_verified ? 'text-stone-500 w-48' : 'text-red-700 w-40'">
-                                            {{ item.title }}</div>
-                                    </div>
-                                </div>
-
-                                <span v-if="item.detection?.is_verified">
-                                    <span v-if="item.detection?.verification_method === 'BATCH_OVERWRITE'"
-                                        class="text-[10px] font-bold text-stone-600 bg-stone-200 px-2 py-1 rounded">일괄-강제완료</span>
-                                    <span v-else
-                                        class="text-[10px] font-bold text-green-600 bg-green-50 px-2 py-1 rounded">제자리-조치완료</span>
-                                </span>
-                                <div v-else class="text-right flex flex-col items-end gap-1">
-                                    <span class="text-[10px] text-stone-400">자세히 보기 ❯</span>
-                                </div>
-                            </div>
-
-                            <div v-else-if="item.status === 'MISSING'"
-                                class="bg-stone-50 p-3 rounded-lg border border-dashed border-stone-400 flex items-center justify-between opacity-80">
-                                <div class="flex items-center gap-3">
-                                    <div
-                                        class="w-8 h-12 bg-stone-200 rounded border border-stone-300 flex items-center justify-center text-[12px] font-bold text-stone-500 opacity-60">
-                                        ?</div>
-                                    <div>
-                                        <div class="text-xs font-bold text-stone-600 flex items-center gap-1">
-                                            <span class="bg-stone-600 text-white text-[8px] px-1 rounded">유실/미인식</span>
-                                            {{ item.call_number }}
-                                        </div>
-                                        <div class="text-[10px] text-stone-500 mt-0.5 w-48 truncate">{{ item.title }}
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </template>
-                    </div>
-                </section>
-
-                <section v-if="unexpectedDetections.length > 0">
-                    <h3 class="text-xs font-bold text-orange-600 mb-3 ml-1 flex items-center gap-1">
-                        <span>⚠️ 잘못 꽂힌 타 구역 도서 및 미인식 도서</span>
-                    </h3>
-                    <div class="flex flex-col gap-2">
-                        <template v-for="d in unexpectedDetections" :key="d.detection_id">
-
-                            <div v-if="d.status === 'MISPLACED'"
-                                class="bg-orange-50 p-3 rounded-lg border border-orange-300 flex items-center justify-between shadow-sm">
-                                <div class="flex items-center gap-3" @click="openBookDetail(d)">
-                                    <img v-if="d.crop_image_url" :src="d.crop_image_url"
-                                        class="w-8 h-12 object-cover rounded shadow-sm border border-orange-400" />
-                                    <div>
-                                        <div class="text-xs font-bold text-orange-900 flex items-center gap-1">
-                                            <span class="bg-orange-500 text-white text-[8px] px-1 rounded">외부도서</span>
-                                            {{ d.ocr_call_number || d.ocr_title }}
-                                        </div>
-                                        <div
-                                            class="text-[10px] text-orange-800 mt-1 bg-white inline-block px-2 py-0.5 rounded border border-orange-200">
-                                            원래 위치: <strong>{{ d.assigned_loc_id || '알 수 없음' }}</strong>
-                                        </div>
-                                    </div>
-                                </div>
-                                <button @click.stop="openEditModal(d)"
-                                    class="bg-orange-600 text-white px-3 py-1.5 rounded text-[10px] font-bold shadow shrink-0 ml-2">수동교정</button>
-                            </div>
-
-                            <div v-else-if="d.status === 'UNKNOWN'"
-                                class="bg-stone-100 p-3 rounded-lg border border-stone-300 flex items-center justify-between">
-                                <div class="flex items-center gap-3">
-                                    <img v-if="d.crop_image_url" :src="d.crop_image_url"
-                                        class="w-8 h-12 object-cover rounded shadow-sm border border-stone-300" />
-                                    <div>
-                                        <div class="text-xs font-bold text-stone-700 flex items-center gap-1">
-                                            <span class="bg-stone-500 text-white text-[8px] px-1 rounded">미인식</span> {{
-                                                d.ocr_call_number || '해독 불가' }}
-                                        </div>
-                                        <div class="text-[10px] text-stone-500 mt-0.5">신뢰도 {{ Math.round(d.confidence)
-                                        }}%</div>
-                                    </div>
-                                </div>
-                                <button @click="openEditModal(d)"
-                                    class="bg-stone-800 text-white px-3 py-1.5 rounded text-[10px] font-bold shadow shrink-0">수동교정</button>
-                            </div>
-
-                        </template>
-                    </div>
-                </section>
+                <UnexpectedBookList v-if="unexpectedDetections.length > 0" :detections="unexpectedDetections"
+                    @select="openBookDetail" @edit="openEditModal" />
             </div>
 
+            <!-- 도서 상세 정보 모달 -->
+            <BookDetailModal v-if="selectedBook" :book="selectedBook" @close="selectedBook = null"
+                @verify="verifyMisplacement" @edit="switchFromDetailToEdit" @ignore="ignoreDetection"
+                @zoom="openZoom" />
 
-            <div v-if="selectedBook" class="absolute inset-0 bg-stone-900/60 z-50 flex items-center justify-center p-4">
-                <div
-                    class="bg-white w-full max-w-sm rounded-2xl p-6 flex flex-col animate-slide-up shadow-2xl border border-stone-200">
-
-                    <div class="flex justify-between items-start mb-3 border-b border-stone-100 pb-3">
-                        <div>
-                            <h2 class="text-base font-extrabold text-stone-900 flex items-center gap-2">
-                                <span>도서 상세 정보</span>
-                                <span v-if="selectedBook.status === 'MATCH'"
-                                    class="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded-full">정상
-                                    배치</span>
-                                <span
-                                    v-else-if="selectedBook.status === 'MISPLACED' && selectedBook._raw_detection?.is_verified"
-                                    class="text-[10px] font-bold px-2 py-0.5 rounded-full"
-                                    :class="selectedBook._raw_detection?.verification_method === 'BATCH_OVERWRITE' ? 'bg-stone-200 text-stone-700' : 'bg-green-100 text-green-700'">
-                                    {{ selectedBook._raw_detection?.verification_method === 'BATCH_OVERWRITE' ?
-                                    '일괄-강제완료' :
-                                    '제자리-조치완료' }}
-                                </span>
-                                <span v-else-if="selectedBook.status === 'MISPLACED'"
-                                    class="text-[10px] font-bold bg-red-100 text-red-700 px-2 py-0.5 rounded-full">순서
-                                    오류</span>
-                                <span v-else-if="selectedBook.status === 'EXTRA'"
-                                    class="text-[10px] font-bold bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full">타
-                                    구역
-                                    도서</span>
-                            </h2>
-                        </div>
-                        <button @click="selectedBook = null"
-                            class="text-stone-400 text-2xl leading-none hover:text-stone-600 transition-colors">✕</button>
-                    </div>
-
-                    <div
-                        class="flex flex-col items-center bg-stone-50 py-3 rounded-xl mb-4 border border-stone-100 shadow-inner gap-2">
-                        <img v-if="selectedBook.crop_image_url" :src="selectedBook.crop_image_url"
-                            class="h-40 object-contain rounded shadow border border-stone-200 bg-white" />
-                        <div v-else
-                            class="h-40 w-24 bg-stone-200 rounded border border-stone-300 flex items-center justify-center text-xs text-stone-500">
-                            크롭 사진 없음</div>
-
-                        <button v-if="selectedBook.crop_image_url"
-                            @click="openZoom(selectedBook._raw_detection || selectedBook)" type="button"
-                            class="flex items-center gap-1 bg-white text-stone-700 border border-stone-300 px-2.5 py-1.5 rounded-md text-[10px] font-bold shadow-sm active:bg-stone-50 transition-colors">
-                            <span>🔍</span> 이미지 크게 보기
-                        </button>
-                    </div>
-
-                    <div class="flex flex-col gap-2 bg-stone-50 p-3.5 rounded-xl text-xs text-stone-700 mb-4">
-                        <div class="flex flex-col gap-0.5">
-                            <span class="text-[10px] font-bold text-stone-400">DB 장서 도서명</span>
-                            <span class="font-bold text-stone-900 break-all line-clamp-1">{{ selectedBook.title
-                            }}</span>
-                        </div>
-                        <div class="border-t border-stone-200/60 my-0.5"></div>
-
-                        <div class="grid grid-cols-2 gap-2">
-                            <div class="flex flex-col gap-0.5">
-                                <span class="text-[10px] font-bold text-stone-400">청구기호</span>
-                                <span class="font-semibold text-stone-800 font-mono">{{ selectedBook.call_number
-                                }}</span>
-                            </div>
-                            <div class="flex flex-col gap-0.5">
-                                <span class="text-[10px] font-bold text-stone-400">배정 서가 위치</span>
-                                <span class="font-semibold text-stone-800">{{ selectedBook.location }}</span>
-                            </div>
-                        </div>
-                        <div class="border-t border-stone-200/60 my-0.5"></div>
-
-                        <div class="grid grid-cols-2 gap-2">
-                            <div class="flex flex-col gap-0.5">
-                                <span class="text-[10px] font-bold text-stone-400">서가 정위치 순서(Full 상태에서)</span>
-                                <span class="font-extrabold text-green-600">{{ selectedBook.expected_order }}번째</span>
-                            </div>
-                            <div class="flex flex-col gap-0.5">
-                                <span class="text-[10px] font-bold text-stone-400">현재 탐지된 순서</span>
-                                <span class="font-extrabold"
-                                    :class="(selectedBook.status === 'MISPLACED' && !selectedBook._raw_detection?.is_verified) ? 'text-red-500' : 'text-stone-600'">{{
-                                        selectedBook.detected_order }}번째</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="flex flex-col gap-2">
-                        <button v-if="selectedBook.status === 'MISPLACED' && !selectedBook._raw_detection?.is_verified"
-                            @click="verifyMisplacement" type="button"
-                            class="w-full bg-[#2E7D32] text-white font-bold py-3 rounded-xl text-xs hover:bg-green-700 transition-colors shadow-md flex justify-center items-center gap-1">
-                            ✓ 오배열 물리적 조치 완료
-                        </button>
-
-                        <button @click="switchFromDetailToEdit" type="button"
-                            class="w-full bg-stone-100 text-stone-600 hover:text-stone-900 border border-stone-300 font-bold py-2 rounded-xl text-[11px] transition-colors flex items-center justify-center gap-1">
-                            ✏️ 인식을 잘못했나요? 수동 교정하기
-                        </button>
-
-                        <button @click="ignoreDetection" type="button"
-                            class="w-full bg-red-50 text-red-600 hover:text-red-700 border border-red-200 font-bold py-2 rounded-xl text-[11px] transition-colors flex items-center justify-center gap-1">
-                            🗑️ 책이 아님 (탐지 결과 삭제)
-                        </button>
-
-                        <button @click="selectedBook = null"
-                            class="w-full bg-stone-800 text-white font-bold py-3 rounded-xl text-xs hover:bg-stone-700 transition-colors shadow-md">
-                            {{ selectedBook.status === 'MISPLACED' && !selectedBook._raw_detection?.is_verified ? '다음에 하기 (닫기)' : '닫기' }}
-                        </button>
-                    </div>
-
-                </div>
-            </div>
-
-            <div class="absolute bottom-0 w-full bg-white border-t border-stone-200 p-3 flex gap-2">
-                <button @click="router.push('/history')"
-                    class="flex-1 bg-stone-100 text-stone-700 hover:bg-stone-200 text-xs font-bold py-3 rounded-xl transition-colors">
-                    목록으로
-                </button>
-                <button @click="verifyAllActions"
-                    class="flex-[2] bg-[#2E7D32] hover:bg-green-700 text-white text-xs font-bold py-3 rounded-xl transition-colors shadow-md">
-                    일괄 조치 완료 처리
-                </button>
-            </div>
+            <DetailActionBar @go-list="router.push('/history')" @verify-all="verifyAllActions" />
 
             <!-- Edit Modal -->
-            <div v-if="showEditModal" class="absolute inset-0 bg-stone-900/60 z-50 flex items-end justify-center"
-                @click.self="closeEditModal">
-                <div
-                    class="bg-white w-full rounded-t-3xl p-6 flex flex-col gap-4 animate-slide-up max-h-[85vh] overflow-y-auto relative">
+            <ManualMatchModal v-if="showEditModal" :editing-book="editingBook" :search-query="searchQuery"
+                :search-results="searchResults" :is-searching="isSearching"
+                :selected-candidate="selectedMatchCandidate" @update:search-query="searchQuery = $event"
+                @search-input="onSearchInput" @select-candidate="selectCandidate" @close="closeEditModal"
+                @match="forceMatch" @ignore="ignoreDetection" @zoom="openZoom" />
 
-                    <div class="flex justify-between items-center border-b border-stone-100 pb-2">
-                        <div>
-                            <h3 class="text-sm font-extrabold text-stone-900">도서 정보 수동 교정</h3>
-                            <p class="text-[10px] text-stone-400 mt-0.5">Vision AI가 해독하지 못한 청구기호를 수동으로 입력합니다.</p>
-                        </div>
-                        <button @click="closeEditModal" class="text-stone-400 text-xl p-1">✕</button>
-                    </div>
-
-                    <div
-                        class="flex flex-col items-center bg-stone-50 p-3 rounded-xl border border-stone-100 shadow-inner gap-2">
-                        <div class="relative group max-w-[120px]">
-                            <img v-if="editingBook?.crop_image_url" :src="editingBook.crop_image_url"
-                                class="h-36 object-contain rounded shadow border border-stone-200 bg-white" />
-                            <div v-else
-                                class="h-36 w-20 bg-stone-200 rounded border border-stone-300 flex items-center justify-center text-[10px] text-stone-500">
-                                책등 이미지 없음</div>
-                        </div>
-
-                        <button v-if="editingBook?.crop_image_url" @click="openZoom(editingBook)" type="button"
-                            class="flex items-center gap-1 bg-white text-stone-700 border border-stone-300 px-3 py-1.5 rounded-lg text-[10px] font-bold shadow-sm active:bg-stone-50 transition-colors">
-                            <span>🔍</span> 이미지 크게 보기
-                        </button>
-                    </div>
-
-                    <div class="bg-stone-50 p-2.5 rounded-lg text-[10px] text-stone-600 flex flex-col gap-1 font-mono">
-                        <div>🤖 <strong>AI OCR 결과:</strong> {{ editingBook?.ocr_call_number || '판독 불가' }}</div>
-                        <div>🎯 <strong>추론 신뢰도:</strong> {{ editingBook ? Math.round(editingBook.confidence) : 0
-                            }}%</div>
-                    </div>
-
-                    <div class="flex flex-col gap-3">
-                        <div class="flex flex-col gap-1"> <label class="text-[11px] font-bold text-stone-500">매칭할 도서명 또는
-                                청구기호
-                                검색</label>
-                            <input type="text" v-model="searchQuery" @input="onSearchInput" placeholder="검색어 입력..."
-                                class="border border-stone-300 rounded-xl p-3 text-xs focus:outline-none focus:border-stone-800" />
-
-                            <div v-if="searchQuery && (isSearching || searchResults.length > 0)"
-                                class="w-full bg-white border border-stone-200 shadow-sm rounded-lg max-h-40 overflow-y-auto mt-1">
-                                <div v-if="isSearching" class="p-3 text-center text-[10px] text-stone-500">검색 중...</div>
-                                <div v-else v-for="book in searchResults" :key="book.book_id"
-                                    @click="selectCandidate(book)"
-                                    class="p-2 border-b border-stone-100 cursor-pointer hover:bg-stone-50 transition-colors"
-                                    :class="{ 'bg-green-50 border-l-4 border-green-500': selectedMatchCandidate?.book_id === book.book_id }">
-                                    <div class="font-bold text-xs text-stone-800">{{ book.call_number }}</div>
-                                    <div class="text-[10px] text-stone-500 truncate mt-0.5">{{ book.title }}</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="flex flex-col gap-2 mt-2">
-                        <button @click="ignoreDetection" type="button"
-                            class="w-full bg-red-50 text-red-600 hover:text-red-700 border border-red-200 font-bold py-2.5 rounded-xl text-xs transition-colors flex items-center justify-center gap-1 shadow-sm">
-                            🗑️ 책이 아님 (탐지 결과 삭제)
-                        </button>
-
-                        <div class="flex gap-2">
-                            <button @click="closeEditModal"
-                                class="flex-1 bg-stone-100 text-stone-700 text-xs font-bold py-3.5 rounded-xl">
-                                취소
-                            </button>
-                            <button @click="forceMatch" :disabled="!selectedMatchCandidate"
-                                class="flex-[2] text-white text-xs font-bold py-3.5 rounded-xl shadow-md transition-colors"
-                                :class="selectedMatchCandidate ? 'bg-stone-800 hover:bg-stone-700' : 'bg-stone-300 cursor-not-allowed'">
-                                선택한 도서로 강제 매칭
-                            </button>
-                        </div>
-                    </div>
-
-                </div>
-            </div>
-
-            <div v-if="showZoomModal"
-                class="absolute inset-0 bg-stone-950/95 z-[60] flex flex-col items-center justify-center p-4 animate-fade-in"
-                @click="closeZoom">
-
-                <div class="absolute top-6 right-6 flex items-center gap-4 z-10">
-                    <span
-                        class="text-white/60 text-xs font-medium bg-black/40 px-3 py-1.5 rounded-full backdrop-blur-sm">화면
-                        터치
-                        시 닫힘</span>
-                    <button @click="closeZoom"
-                        class="bg-white/10 hover:bg-white/20 text-white w-10 h-10 rounded-full flex items-center justify-center text-xl backdrop-blur-sm transition-colors">✕</button>
-                </div>
-
-                <div class="w-full max-w-md max-h-[75vh] flex items-center justify-center overflow-hidden p-2">
-                    <img :src="zoomedImage?.crop_image_url"
-                        class="max-w-full max-h-[72vh] object-contain rounded-lg shadow-2xl border border-white/10 animate-scale-up"
-                        @click.stop />
-                </div>
-
-                <div class="mt-4 bg-black/60 backdrop-blur-md text-white border border-white/10 px-5 py-3 rounded-2xl max-w-xs text-center shadow-lg"
-                    @click.stop>
-                    <div class="text-[10px] text-white/50 font-bold uppercase tracking-wider mb-0.5">AI 인식 텍스트</div>
-                    <div class="text-xs font-mono font-bold text-orange-400 truncate">
-                        {{ zoomedImage?.ocr_call_number || zoomedImage?.call_number || '판독 불가' }}
-                    </div>
-                </div>
-            </div>
+            <!-- 이미지 확대 모달 -->
+            <ImageZoomModal v-if="showZoomModal" :image="zoomedImage" @close="closeZoom" />
         </template>
     </main>
 </template>
