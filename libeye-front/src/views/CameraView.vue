@@ -52,28 +52,86 @@ const imageContainerRef = ref<HTMLDivElement | null>(null);
 // 💡 크롭박스 상태 + 드래그/리사이즈 제어 (composable로 분리)
 const { cropBox, hasCropBox, cropRect, startCropDrag, moveCropDrag, endCropDrag } = useCropBox(imageContainerRef);
 
+// ─── ✨ 수정된 코드 (직접 촬영 시에도 크롭 단계를 타도록 변경) ───
 const takePhoto = async () => {
   if (imageCapture.value) {
     try {
-      // 기기가 지원하는 최대 해상도로 사진 촬영 (설정 주입 가능)
       const blob = await imageCapture.value.takePhoto({
-        imageWidth: 4032,  // 💡 원하는 최대 해상도 지정 (기기 스펙에 맞춰 최적화됨)
+        imageWidth: 4032,
         imageHeight: 3024
       });
 
       stopCamera();
 
-      const file = blobToFile(blob, `camera_${Date.now()}.png`);
+      // 촬영된 이미지 원본 주소 생성
       const previewUrlStr = URL.createObjectURL(blob);
+      previewUrl.value = previewUrlStr;
+      
+      // 🚀 크롭 단계 활성화
+      isCropping.value = true;
+      hasCropBox.value = true;
 
-      capturedFiles.value.push(file);
-      capturedPreviews.value.push(previewUrlStr);
-      isConfirming.value = true;
-      return; // 고해상도 촬영 성공 시 아래 캔버스 로직은 타지 않음
+      // HTML <img> 엘리먼트를 생성해 크롭용 원본 이미지 참조 바인딩
+      const img = new Image();
+      img.onload = () => {
+        uploadedImage.value = img;
+        if (imageContainerRef.value) {
+          const cw = imageContainerRef.value.clientWidth;
+          const ch = imageContainerRef.value.clientHeight;
+          // 화면 중앙에 적당히 크롭 가이드라인 레이아웃 초기 배치
+          cropBox.value = {
+            x1: cw * 0.1,
+            y1: ch * 0.2,
+            x2: cw * 0.9,
+            y2: ch * 0.8
+          };
+        }
+      };
+      img.src = previewUrlStr;
+      return; 
     } catch (err) {
       console.error("High-res capture failed, falling back to canvas:", err);
     }
   }
+
+  // 💡 [Fallback] ImageCapture 미지원 기기용 Canvas 캡처 로직도 동일하게 수정
+  if (!videoRef.value || !canvasRef.value) return;
+  const video = videoRef.value;
+  const canvas = canvasRef.value;
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  ctx.drawImage(video, 0, 0);
+  
+  canvas.toBlob((blob) => {
+    if (!blob) return;
+    stopCamera();
+    
+    const previewUrlStr = URL.createObjectURL(blob);
+    previewUrl.value = previewUrlStr;
+    
+    // 🚀 크롭 단계 활성화
+    isCropping.value = true;
+    hasCropBox.value = true;
+
+    const img = new Image();
+    img.onload = () => {
+      uploadedImage.value = img;
+      if (imageContainerRef.value) {
+        const cw = imageContainerRef.value.clientWidth;
+        const ch = imageContainerRef.value.clientHeight;
+        cropBox.value = {
+          x1: cw * 0.1,
+          y1: ch * 0.2,
+          x2: cw * 0.9,
+          y2: ch * 0.8
+        };
+      }
+    };
+    img.src = previewUrlStr;
+  }, 'image/png');
+};
 
   // 💡 [Fallback] ImageCapture 미지원 기기(일부 구형 웹뷰)일 경우에만 기존 캔버스 캡처 수행
   if (!videoRef.value || !canvasRef.value) return;
