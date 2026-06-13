@@ -100,6 +100,14 @@ def hybrid_book_matching_with_jamo(
         # 3. 최종 가중합 산출
         final_score = call_num_score * WEIGHT_CALL_NUM + title_score * WEIGHT_TITLE
 
+        # ✨ [개선] 청구기호 점수가 100점(완벽 일치)인 경우의 구제 로직
+        if call_num_score == 100:
+            # 최소 85점을 보장하고, 제목 점수의 15%를 더해 85.0 ~ 100.0 점 사이로 보정합니다.
+            # 이를 통해 제목이 0점이어도 85점으로 MATCH_THRESHOLD(80.0)를 통과합니다.
+            # 만약 같은 청구기호의 다른 책이 있다면 제목이 더 유사한 책이 최종 선택됩니다.
+            boosted_score = 85.0 + (title_score * 0.15)
+            final_score = max(final_score, boosted_score)
+
         print(
             f"[{book.title}] 청구점수:{call_num_score}, "
             f"제목점수(자소):{title_score} -> 최종:{final_score:.1f}"
@@ -108,6 +116,7 @@ def hybrid_book_matching_with_jamo(
         if final_score > highest_score:
             highest_score = final_score
             best_match = book
+      
 
     if best_match is not None and highest_score >= MATCH_THRESHOLD:
         print(
