@@ -4,7 +4,6 @@ import { useRouter, useRoute } from 'vue-router';
 import { startSession, getLocations } from '../api/sessionAPI';
 import { useCameraStream } from '../composables/useCameraStream';
 import { useCropBox } from '../composables/useCropBox';
-import { dataURLtoFile } from '../utils/file';
 import { enterFullScreen, exitFullScreen } from '../utils/fullscreen';
 import LocationSelectModal from '../components/camera/LocationSelectModal.vue';
 import CameraTopBar from '../components/camera/CameraTopBar.vue';
