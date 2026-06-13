@@ -12,6 +12,73 @@ router = APIRouter(prefix="/api/v1/sessions", tags=["Results"])
 # MinIO 내부 URL 패턴: http://minio:9000/{bucket}/{key}
 _MINIO_URL_PATTERN = re.compile(r"https?://[^/]+/([^/]+)/(.+)")
 
+
+def recalculate_session_status(session_id: str, db: Session):
+    """
+    세션 내의 모든 탐지 결과를 가져와 중복(DUPLICATE) 판별 및 
+    LIS 기반 서가 오배열 상태를 일관되게 재계산하고 세션 요약 통계를 업데이트합니다.
+    """
+    session = db.query(ScanSession).filter_by(session_id=session_id).first()
+    if not session:
+        return
+
+    # 1. 현재 세션의 모든 탐지 도서를 물리적 순서대로 조회
+    all_dets = db.query(ScanResultDetail).filter_by(session_id=session_id).order_by(ScanResultDetail.detected_order).all()
+    
+    # 2. 세션 내에서 중복 할당된 book_id 추출
+    matched_ids = [d.matched_book_id for d in all_dets if d.matched_book_id]
+    duplicate_book_ids = {bid for bid in matched_ids if matched_ids.count(bid) > 1}
+
+    valid_seq = []
+    for d in all_dets:
+        if d.matched_book_id:
+            # 동일한 책에 중복 매칭된 경우 'DUPLICATE' 상태 부여 후 LIS 대상에서 제외
+            if d.matched_book_id in duplicate_book_ids:
+                d.status = 'DUPLICATE'
+                continue
+                
+            b = db.query(BookMaster).filter_by(book_id=d.matched_book_id).first()
+            if b and b.assigned_loc_id == session.location_id:
+                valid_seq.append((d, b.expected_order))
+            else:
+                d.status = 'EXTRA'
+        else:
+            d.status = 'UNKNOWN'
+            
+    # 3. 올바른 위치의 도서들을 대상으로 LIS 오배열 판별 수행
+    if valid_seq:
+        import bisect
+        tails = []
+        parent = {}
+        tail_indices = []
+        
+        for i, (d, exp_order) in enumerate(valid_seq):
+            idx = bisect.bisect_left(tails, exp_order)
+            if idx == len(tails):
+                tails.append(exp_order)
+                tail_indices.append(i)
+            else:
+                tails[idx] = exp_order
+                tail_indices[idx] = i
+            
+            parent[i] = tail_indices[idx - 1] if idx > 0 else -1
+            
+        lis_indices = set()
+        curr = tail_indices[-1] if tail_indices else -1
+        while curr != -1:
+            lis_indices.add(curr)
+            curr = parent[curr]
+            
+        for i, (d, exp_order) in enumerate(valid_seq):
+            d.status = 'MATCH' if i in lis_indices else 'MISPLACED'
+                
+    # 4. ScanSession 대시보드 요약 정보 동기화 (재집계)
+    session.total_books = len(all_dets)
+    session.misplaced_count = sum(1 for d in all_dets if d.status == 'MISPLACED')
+    session.unknown_count = sum(1 for d in all_dets if d.status == 'UNKNOWN')
+    session.updated_at = func.now() # 업데이트 시간 트리거
+
+
 def _to_proxy_path(minio_url: str) -> str | None:
     """
     MinIO 내부 URL (http://minio:9000/bucket/key)을
@@ -122,8 +189,7 @@ class MatchRequest(BaseModel):
 
 @router.put("/{session_id}/detections/{detection_id}/match")
 def force_match_detection(session_id: str, detection_id: str, req: MatchRequest, db: Session = Depends(get_db)):
-    """수동 교정 후 도서를 강제 매칭하고, 해당 서가의 전체 오배열 상태를 LIS 기반으로 재계산합니다."""
-    
+    """수동 교정 후 도서를 강제 매칭하고, 전체 상태를 공통 함수로 재계산합니다."""
     det = db.query(ScanResultDetail).filter_by(session_id=session_id, detection_id=detection_id).first()
     if not det: raise HTTPException(status_code=404, detail="Detection not found")
     
@@ -133,57 +199,8 @@ def force_match_detection(session_id: str, detection_id: str, req: MatchRequest,
     # 1. DB 매칭 정보 강제 덮어쓰기
     det.matched_book_id = book.book_id
     
-    # 2. 오배열 상태(Misplacement) 재계산 (최장 증가 부분 수열 알고리즘 활용)
-    session = db.query(ScanSession).filter_by(session_id=session_id).first()
-    session.updated_at = func.now() # 업데이트 시간 트리거
-    
-    all_dets = db.query(ScanResultDetail).filter_by(session_id=session_id).order_by(ScanResultDetail.detected_order).all()
-    
-    # 🚨 [신규 추가] 세션 내에서 중복 할당된 book_id 추출
-    matched_ids = [d.matched_book_id for d in all_dets if d.matched_book_id]
-    duplicate_book_ids = {bid for bid in matched_ids if matched_ids.count(bid) > 1}
-
-    valid_seq = []
-    for d in all_dets:
-        if d.matched_book_id:
-            # 🚨 [신규 추가] 동일한 책에 중복 매칭된 경우 'DUPLICATE' 상태 부여 후 LIS 대상에서 제외
-            if d.matched_book_id in duplicate_book_ids:
-                d.status = 'DUPLICATE'
-                continue
-                
-            b = db.query(BookMaster).filter_by(book_id=d.matched_book_id).first()
-            if b.assigned_loc_id == session.location_id:
-                valid_seq.append((d, b.expected_order))
-            else:
-                d.status = 'EXTRA'
-        else:
-            d.status = 'UNKNOWN'
-            
-    if valid_seq:
-        import bisect
-        tails = []
-        parent = {}
-        tail_indices = []
-        
-        for i, (d, exp_order) in enumerate(valid_seq):
-            idx = bisect.bisect_left(tails, exp_order)
-            if idx == len(tails):
-                tails.append(exp_order)
-                tail_indices.append(i)
-            else:
-                tails[idx] = exp_order
-                tail_indices[idx] = i
-            
-            parent[i] = tail_indices[idx - 1] if idx > 0 else -1
-            
-        lis_indices = set()
-        curr = tail_indices[-1] if tail_indices else -1
-        while curr != -1:
-            lis_indices.add(curr)
-            curr = parent[curr]
-            
-        for i, (d, exp_order) in enumerate(valid_seq):
-            d.status = 'MATCH' if i in lis_indices else 'MISPLACED'
+    # 2. 공통 함수를 통한 오배열 및 중복 상태 일괄 재계산
+    recalculate_session_status(session_id, db)
                 
     db.commit()
     return {"message": "Matched successfully and recalculated status"}
@@ -202,9 +219,9 @@ def verify_misplacement(session_id: str, detection_id: str, db: Session = Depend
 # libeye-back/api/routers/results.py 파일 하단에 추가
 
 @router.delete("/{session_id}/detections/{detection_id}")
+@router.delete("/{session_id}/detections/{detection_id}")
 def delete_false_detection(session_id: str, detection_id: str, db: Session = Depends(get_db)):
-    """YOLO가 잘못 탐지한 이미지(책이 아닌 객체)를 삭제하고 서가 배열 상태를 재계산합니다."""
-    
+    """YOLO가 잘못 탐지한 객체를 삭제하고 전체 서가 상태를 재계산합니다."""
     det = db.query(ScanResultDetail).filter_by(session_id=session_id, detection_id=detection_id).first()
     if not det: 
         raise HTTPException(status_code=404, detail="Detection not found")
@@ -212,49 +229,8 @@ def delete_false_detection(session_id: str, detection_id: str, db: Session = Dep
     # 1. 탐지 결과 DB에서 완전히 삭제
     db.delete(det)
     
-    # 2. 오배열 상태 재계산을 위해 세션 업데이트 트리거
-    session = db.query(ScanSession).filter_by(session_id=session_id).first()
-    session.updated_at = func.now()
-    
-    # 3. 남은 도서들을 다시 불러와서 오배열(LIS) 재계산
-    remaining_dets = db.query(ScanResultDetail).filter_by(session_id=session_id).order_by(ScanResultDetail.detected_order).all()
-    
-    valid_seq = []
-    for d in remaining_dets:
-        if d.matched_book_id:
-            b = db.query(BookMaster).filter_by(book_id=d.matched_book_id).first()
-            if b and b.assigned_loc_id == session.location_id:
-                valid_seq.append((d, b.expected_order))
-            else:
-                d.status = 'EXTRA'
-        else:
-            d.status = 'UNKNOWN'
-            
-    if valid_seq:
-        import bisect
-        tails = []
-        parent = {}
-        tail_indices = []
-        
-        for i, (d, exp_order) in enumerate(valid_seq):
-            idx = bisect.bisect_left(tails, exp_order)
-            if idx == len(tails):
-                tails.append(exp_order)
-                tail_indices.append(i)
-            else:
-                tails[idx] = exp_order
-                tail_indices[idx] = i
-            
-            parent[i] = tail_indices[idx - 1] if idx > 0 else -1
-            
-        lis_indices = set()
-        curr = tail_indices[-1] if tail_indices else -1
-        while curr != -1:
-            lis_indices.add(curr)
-            curr = parent[curr]
-            
-        for i, (d, exp_order) in enumerate(valid_seq):
-            d.status = 'MATCH' if i in lis_indices else 'MISPLACED'
+    # 2. 공통 함수 호출 (삭제 후 남은 도서들의 중복 해소 및 LIS 재정렬 자동 반영)
+    recalculate_session_status(session_id, db)
                 
     db.commit()
     return {"message": "Detection deleted and status recalculated"}

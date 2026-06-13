@@ -274,6 +274,13 @@ def process_scan_session(session_id: str):
                 final_results, resolved_loc, inferred_loc = detect_misplacements(
                     final_results, session.location_id if session else None
                 )
+        # 🚨 [신규 추가] 최초 분석 결과 리스트 내에서 중복 할당된 정답 도서 ID 판별 및 상태 변경
+        matched_ids = [r.get("matched_book_id") for r in final_results if r.get("matched_book_id")]
+        duplicate_book_ids = {bid for bid in matched_ids if matched_ids.count(bid) > 1}
+        
+        for r in final_results:
+            if r.get("matched_book_id") in duplicate_book_ids:
+                r["status"] = "DUPLICATE"    
 
         # location_id가 없었던 경우 추론된 값을 세션에 저장
         if session and not session.location_id and resolved_loc:
