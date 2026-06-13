@@ -162,18 +162,23 @@ def process_scan_session(session_id: str):
 
             # 🚨 [핵심 알고리즘] 중복 제거(Deduplication) 및 병합 로직
             if global_results and local_results:
-                # N번째 이미지의 우측 끝 3권과 N+1번째 이미지의 좌측 끝 3권을 교차 비교
+                # N번째 이미지의 우측 끝과 N+1번째 이미지의 좌측 끝을 교차 비교 (기본 3권, 최대 5권 등으로 가변 설정 가능)
                 overlap_window = 3
-                last_globals = global_results[-overlap_window:]
-                first_locals = local_results[:overlap_window]
+                
+                # 🛠️ [버그 수정] global_results의 전체 크기가 window보다 작을 때를 대비한 안전 장치
+                actual_window = min(overlap_window, len(global_results))
+                last_globals = global_results[-actual_window:]
+                
+                # 로컬 이미지도 window 크기만큼만 슬라이싱하여 비교
+                actual_local_window = min(overlap_window, len(local_results))
+                first_locals = local_results[:actual_local_window]
 
                 duplicate_local_indices = set()
 
                 for l_idx, l_book in enumerate(first_locals):
                     for g_idx_offset, g_book in enumerate(last_globals):
-                        g_idx = len(global_results) - overlap_window + g_idx_offset
-                        if g_idx < 0:
-                            continue
+                        # 🛠️ [버그 수정] 정확한 절대 인덱스 계산
+                        g_idx = len(global_results) - actual_window + g_idx_offset
 
                         is_match = False
 
@@ -181,14 +186,15 @@ def process_scan_session(session_id: str):
                         if g_book["matched_book_id"] and l_book["matched_book_id"]:
                             if g_book["matched_book_id"] == l_book["matched_book_id"]:
                                 is_match = True
+                                
                         # 기준 2: 정답은 못 찾았지만 OCR 추출 청구기호 텍스트가 완전히 일치하는 경우
-                        elif g_book["raw_ocr_data"].get("call_number") and l_book[
-                            "raw_ocr_data"
-                        ].get("call_number"):
-                            if (
-                                g_book["raw_ocr_data"]["call_number"]
-                                == l_book["raw_ocr_data"]["call_number"]
-                            ):
+                        elif g_book["raw_ocr_data"].get("call_number") and l_book["raw_ocr_data"].get("call_number"):
+                            if g_book["raw_ocr_data"]["call_number"].strip() == l_book["raw_ocr_data"]["call_number"].strip():
+                                is_match = True
+                                
+                        # ✨ [개선 보완] 기준 3: 청구기호는 없거나 다르지만, OCR 추출 도서명이 완벽히 일치하는 경우
+                        elif g_book["raw_ocr_data"].get("title") and l_book["raw_ocr_data"].get("title"):
+                            if str(g_book["raw_ocr_data"]["title"]).strip() == str(l_book["raw_ocr_data"]["title"]).strip():
                                 is_match = True
 
                         if is_match:
