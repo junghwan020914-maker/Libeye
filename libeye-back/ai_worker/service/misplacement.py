@@ -22,6 +22,9 @@ def detect_misplacements(
     """
     if not books:
         return books, location_id, None
+    
+    for book in books:
+        book.pop("status", None)
 
     # ── 1차 필터: 책장 기반 ──────────────────────────────────────────────
 
