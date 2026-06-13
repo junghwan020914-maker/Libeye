@@ -108,8 +108,9 @@ def process_scan_session(session_id: str):
                         ocr_result = extract_text_with_gemma(b64)
 
                     # 5. DB 하이브리드 퍼지 매칭 (기존 로직 그대로 유지)
-                    raw_call_number = ocr_result.get("call_number", "")
-                    raw_title = ocr_result.get("title", "")
+                    # 🛠️ [안전 장치] 동일하게 타입 예외 처리 적용
+                    raw_call_number = str(ocr_result.get("call_number") if ocr_result.get("call_number") is not None else "").strip()
+                    raw_title = str(ocr_result.get("title") if ocr_result.get("title") is not None else "").strip()
 
                     matched = None
                     # 🌟 [추가됨] matcher.py가 산출한 최고 매칭 점수 (매칭 실패 시에도 최고 점수 보존)
@@ -253,8 +254,9 @@ def process_scan_session(session_id: str):
                     # 4) 보정용 프롬프트 기반 Gemma OCR 재호출
                     ocr_result = extract_text_with_gemma_retry(b64)
                     
-                    raw_call_number = ocr_result.get("call_number", "")
-                    raw_title = ocr_result.get("title", "")
+                    # 🛠️ [안전 장치] 어떤 타입이 들어와도 안전하게 문자열 변환 및 strip 처리
+                    raw_call_number = str(ocr_result.get("call_number") if ocr_result.get("call_number") is not None else "").strip()
+                    raw_title = str(ocr_result.get("title") if ocr_result.get("title") is not None else "").strip()
                     
                     # 5) 새 텍스트 결과가 있다면 다시 DB 하이브리드 매칭 시도
                     if raw_call_number.strip() or raw_title.strip():
