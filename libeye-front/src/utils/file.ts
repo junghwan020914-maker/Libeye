@@ -9,3 +9,7 @@ export const dataURLtoFile = (dataurl: string, filename: string): File => {
   }
   return new File([u8arr], filename, { type: mime });
 };
+
+export const blobToFile = (blob: Blob, filename: string): File => {
+  return new File([blob], filename, { type: blob.type });
+};

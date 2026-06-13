@@ -14,6 +14,7 @@ import CameraErrorPanel from '../components/camera/CameraErrorPanel.vue';
 import CameraBottomBar from '../components/camera/CameraBottomBar.vue';
 import CaptureConfirmSheet from '../components/camera/CaptureConfirmSheet.vue';
 import UploadingOverlay from '../components/camera/UploadingOverlay.vue';
+import { dataURLtoFile, blobToFile } from '../utils/file';
 
 const router = useRouter();
 const route = useRoute();
@@ -64,17 +65,23 @@ const takePhoto = async () => {
   if (!ctx) return;
 
   ctx.drawImage(video, 0, 0);
-  const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+  canvas.toBlob((blob) => {
+    if (!blob) {
+      alert('이미지 추출에 실패했습니다.');
+      return;
+    }
+    
+    stopCamera();
 
-  stopCamera();
+    const file = blobToFile(blob, `camera_${Date.now()}.png`);
+    // 프리뷰(미리보기)를 위해 Object URL 생성 (메모리 효율적)
+    const previewUrlStr = URL.createObjectURL(blob);
 
-  const file = dataURLtoFile(dataUrl, `camera_${Date.now()}.jpg`);
-  if (file) {
     capturedFiles.value.push(file);
-    capturedPreviews.value.push(dataUrl);
-  }
+    capturedPreviews.value.push(previewUrlStr);
 
-  isConfirming.value = true;
+    isConfirming.value = true;
+  }, 'image/png');
 };
 
 const triggerFileUpload = () => {
@@ -161,22 +168,22 @@ const applyCropAndUpload = async () => {
   canvas.height = Math.floor(sourceH);
 
   ctx.drawImage(uploadedImage.value, sourceX, sourceY, sourceW, sourceH, 0, 0, canvas.width, canvas.height);
-  const croppedDataUrl = canvas.toDataURL('image/jpeg', 0.9);
+  canvas.toBlob((blob) => {
+    if (!blob) {
+      alert('이미지 크롭에 실패했습니다.');
+      return;
+    }
 
-  if (!croppedDataUrl.includes(',')) {
-    alert('이미지 크롭에 실패했습니다.');
-    return;
-  }
+    const file = blobToFile(blob, `crop_${Date.now()}.png`);
+    const croppedPreviewUrl = URL.createObjectURL(blob);
 
-  const file = dataURLtoFile(croppedDataUrl, `crop_${Date.now()}.jpg`);
-  if (file) {
     capturedFiles.value.push(file);
-    capturedPreviews.value.push(croppedDataUrl);
-  }
+    capturedPreviews.value.push(croppedPreviewUrl);
 
-  isCropping.value = false;
-  previewUrl.value = null;
-  isConfirming.value = true;
+    isCropping.value = false;
+    previewUrl.value = null;
+    isConfirming.value = true;
+  }, 'image/png');
 };
 
 // 크롭 취소 (기존 인라인 핸들러를 메서드로 분리)
