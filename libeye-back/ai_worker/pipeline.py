@@ -112,14 +112,14 @@ def process_scan_session(session_id: str):
                     raw_title = ocr_result.get("title", "")
 
                     matched = None
-                    if raw_call_number.strip():
+                    if raw_call_number.strip() or raw_title.strip():
                         with timer.stage("DB 매칭"):
                             print(
                                 f"[{session_id}] 매칭 진행 ( OCR 청구기호: '{raw_call_number}', 제목: '{raw_title}')"
                             )
                             matched = match_book_pipeline(db, raw_call_number, raw_title, limit=5)
                     else:
-                        print(f"[{session_id}] 청구기호 OCR 실패로 매칭 생략")
+                        print(f"[{session_id}] 청구기호 및 제목 OCR 모두 실패로 매칭 생략")
 
                     polygon = None
                     if masks is not None and len(masks.xy) > idx:

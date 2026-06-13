@@ -134,10 +134,10 @@ def match_book_pipeline(db: Session, ocr_call_number: str, ocr_title: str, limit
     unique_candidates_map = {}
     
     for book in candidates_by_call:
-        unique_candidates_map[book.id] = book
+        unique_candidates_map[book.book_id] = book  # 💡 book.id -> book.book_id 로 수정
         
     for book in candidates_by_title:
-        unique_candidates_map[book.id] = book
+        unique_candidates_map[book.book_id] = book  # 💡 book.id -> book.book_id 로 수정
         
     combined_candidates = list(unique_candidates_map.values())
     
