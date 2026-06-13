@@ -32,7 +32,7 @@ DO NOT include any extra notes, descriptions, or comments about text orientation
 # num_predict 한도에 걸려 잘린 시도를 나타내는 센티널
 _TRUNCATED = object()
 
-# 🚨 [추가] 2차 시도용 강력한 보정 프롬프트
+# 🚨 2차 시도용 강력한 보정 프롬프트
 _RETRY_PROMPT = """
 You are an expert library assistant. This is a SECOND ATTEMPT to read a challenging book spine image that failed in the first round.
 Examine the image extremely carefully. Even if the text is blurry, small, rotated, or partially damaged, try your absolute best to infer the 'call_number' and 'title' from visible clues.
@@ -43,7 +43,8 @@ If you cannot read it at all, return empty strings. DO NOT include any extra not
 
 def extract_text_with_gemma(base64_image: str) -> dict:
     for attempt in range(_MAX_RETRIES + 1):
-        result = _request_ocr(base64_image, prompt=_PROMPT) # 🚨 prompt 인자 추가
+        # ➔ 수정한 부분: retry_count로 현재 루프의 attempt 번호를 전달합니다.
+        result = _request_ocr(base64_image, prompt=_PROMPT, retry_count=attempt)
         if result is not _TRUNCATED:
             return result
         if attempt < _MAX_RETRIES:
@@ -51,52 +52,48 @@ def extract_text_with_gemma(base64_image: str) -> dict:
     return {"call_number": "인식실패(생성한도초과)", "title": "인식실패"}
 
 
-# 🚨 [추가] 미매칭 도서 전용 2차 재인식 함수
+# 미매칭 도서 전용 2차 재인식 함수
 def extract_text_with_gemma_retry(base64_image: str) -> dict:
     """1차 매칭 실패 도서를 대상으로 더 엄격하고 정밀한 프롬프트를 사용하여 OCR 재시도"""
     for attempt in range(_MAX_RETRIES + 1):
-        result = _request_ocr(base64_image, prompt=_RETRY_PROMPT) # 보정 프롬프트 사용
+        # ➔ 수정한 부분: retry_count로 현재 루프의 attempt 번호를 전달합니다.
+        result = _request_ocr(base64_image, prompt=_RETRY_PROMPT, retry_count=attempt)
         if result is not _TRUNCATED:
             return result
         if attempt < _MAX_RETRIES:
             print(f"[Ollama] 2차 OCR 내 재시도 ({attempt + 1}/{_MAX_RETRIES})")
     return {"call_number": "2차인식실패(생성한도초과)", "title": "2차인식실패"}
 
-
-# 🚨 [수정] prompt를 동적으로 받을 수 있도록 매개변수 추가
-def _request_ocr(base64_image: str, prompt: str = _PROMPT):
-    """Ollama에 OCR 1회 요청. num_predict 한도로 잘리면 _TRUNCATED를 반환한다."""
-    payload = {
-        "model": OLLAMA_MODEL_NAME,
-        "prompt": prompt, # 🚨 기존 고정 상수에서 매개변수로 변경
-        "images": [base64_image],
-        "format": "json",
-        "stream": True,
-        "options": {"temperature": 0.1, "num_predict": _NUM_PREDICT},
+    
+def build_ollama_options(retry_count: int) -> dict:
+    # 1차 시도 (기본적이고 안정적인 세팅)
+    options = {
+        "temperature": 0.1,
+        "num_predict": _NUM_PREDICT,
+        "num_ctx": 4096,  # 멀티모달 OCR은 안전하게 컨텍스트를 늘려 잡는 것이 좋습니다.
     }
     
+    # 🚨 2차 시도 (재시도 가동 시) 옵션 동적 변형
+    if retry_count > 0:
+        options["temperature"] = 0.2            # 창의성/유연성을 미세하게 부여
+        options["seed"] = int(time.time())       # 매번 다른 난수 경로를 타도록 설정
+        options["min_p"] = 0.05                  # temperature 상승으로 인한 무작위 환각 억제
+        options["repeat_penalty"] = 1.25          # 특정 문자 무한 반복 루프 방지
+        
+    return options
 
 
-
-def extract_text_with_gemma(base64_image: str) -> dict:
-    for attempt in range(_MAX_RETRIES + 1):
-        result = _request_ocr(base64_image)
-        if result is not _TRUNCATED:
-            return result
-        if attempt < _MAX_RETRIES:
-            print(f"[Ollama] OCR 재시도 ({attempt + 1}/{_MAX_RETRIES})")
-    return {"call_number": "인식실패(생성한도초과)", "title": "인식실패"}
-
-
-def _request_ocr(base64_image: str, prompt: str = _PROMPT):
+# ➔ 수정한 부분: retry_count 매개변수를 추가하여 NameError를 해결합니다.
+def _request_ocr(base64_image: str, prompt: str = _PROMPT, retry_count: int = 0):
     """Ollama에 OCR 1회 요청. num_predict 한도로 잘리면 _TRUNCATED를 반환한다."""
     payload = {
         "model": OLLAMA_MODEL_NAME,
-        "prompt": prompt, # 🚨 기존 고정 상수에서 매개변수로 변경
+        "prompt": prompt, 
         "images": [base64_image],
         "format": "json",
         "stream": True,
-        "options": {"temperature": 0.1, "num_predict": _NUM_PREDICT},
+        # ➔ 수정한 부분: 인자로 받은 retry_count를 대입합니다.
+        "options": build_ollama_options(retry_count=retry_count),
     }
     start = time.time()
     try:
