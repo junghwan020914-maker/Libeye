@@ -28,7 +28,7 @@ const selectedLocation = ref<string | null>(null);
 const showLocationModal = ref(true);
 
 // 카메라 스트림 제어 (composable로 분리)
-const { isCameraError, startCamera, stopCamera } = useCameraStream(videoRef, selectedLocation);
+const { isCameraError, imageCapture, startCamera, stopCamera } = useCameraStream(videoRef, selectedLocation);
 
 // 기존 래퍼용 구역 선택 함수 (startCamera 연동 유지)
 const selectLocation = (locationId: string) => {
@@ -53,32 +53,45 @@ const imageContainerRef = ref<HTMLDivElement | null>(null);
 const { cropBox, hasCropBox, cropRect, startCropDrag, moveCropDrag, endCropDrag } = useCropBox(imageContainerRef);
 
 const takePhoto = async () => {
-  if (!videoRef.value || !canvasRef.value) return;
+  if (imageCapture.value) {
+    try {
+      // 기기가 지원하는 최대 해상도로 사진 촬영 (설정 주입 가능)
+      const blob = await imageCapture.value.takePhoto({
+        imageWidth: 4032,  // 💡 원하는 최대 해상도 지정 (기기 스펙에 맞춰 최적화됨)
+        imageHeight: 3024
+      });
 
+      stopCamera();
+
+      const file = blobToFile(blob, `camera_${Date.now()}.png`);
+      const previewUrlStr = URL.createObjectURL(blob);
+
+      capturedFiles.value.push(file);
+      capturedPreviews.value.push(previewUrlStr);
+      isConfirming.value = true;
+      return; // 고해상도 촬영 성공 시 아래 캔버스 로직은 타지 않음
+    } catch (err) {
+      console.error("High-res capture failed, falling back to canvas:", err);
+    }
+  }
+
+  // 💡 [Fallback] ImageCapture 미지원 기기(일부 구형 웹뷰)일 경우에만 기존 캔버스 캡처 수행
+  if (!videoRef.value || !canvasRef.value) return;
   const video = videoRef.value;
   const canvas = canvasRef.value;
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
-
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
-
   ctx.drawImage(video, 0, 0);
+  
   canvas.toBlob((blob) => {
-    if (!blob) {
-      alert('이미지 추출에 실패했습니다.');
-      return;
-    }
-    
+    if (!blob) return;
     stopCamera();
-
     const file = blobToFile(blob, `camera_${Date.now()}.png`);
-    // 프리뷰(미리보기)를 위해 Object URL 생성 (메모리 효율적)
     const previewUrlStr = URL.createObjectURL(blob);
-
     capturedFiles.value.push(file);
     capturedPreviews.value.push(previewUrlStr);
-
     isConfirming.value = true;
   }, 'image/png');
 };
