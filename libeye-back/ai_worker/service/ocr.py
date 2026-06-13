@@ -21,6 +21,9 @@ _MAX_RETRIES = 2
 _PROMPT = """
 You are a library assistant. Examine the image of the book spine.
 Extract the 'call_number' (e.g., 813.6 김12가) and the 'title'.
+'call_number' and the 'title' can be in any orientation.
+They may be partially obscured or damaged, so do your best to infer them from visible clues.
+If you cannot confidently identify either, return an empty string for that field.
 Respond strictly in JSON format like this:
 {"call_number": "extracted text", "title": "extracted text"}
 If you cannot read it, return empty strings.
