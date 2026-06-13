@@ -90,6 +90,17 @@ const emit = defineEmits<{
                 book.detected_order }}번째</span>
           </div>
         </div>
+
+        <!-- 🌟 [추가됨] matcher.py 최고 매칭 점수 (인식/매칭된 도서만 표시) -->
+        <template v-if="book.status !== 'MISSING'">
+          <div class="border-t border-stone-200/60 my-0.5"></div>
+          <div class="flex flex-col gap-0.5">
+            <span class="text-[10px] font-bold text-stone-400">AI 매칭 점수 (highest score)</span>
+            <span class="font-bold font-mono"
+              :class="(book.highest_score ?? 0) >= 80 ? 'text-green-600' : 'text-stone-800'">{{
+                Math.round(book.highest_score ?? 0) }}점</span>
+          </div>
+        </template>
       </div>
 
       <div class="flex flex-col gap-2">

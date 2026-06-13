@@ -53,7 +53,8 @@ const openEditModal = (d: any) => {
         crop_image_url: d.crop_image_url || null,
         ocr_title: d.ocr_title || d.raw_ocr_title || '인식된 제목 없음',
         ocr_call_number: d.ocr_call_number || d.raw_ocr_call_number || '',
-        confidence: d.confidence || 0
+        confidence: d.confidence || 0,
+        highest_score: d.highest_score ?? 0 // 🌟 최고 매칭 점수 전달
     };
     showEditModal.value = true;
 };
@@ -137,6 +138,7 @@ const openBookDetail = (item: any) => {
         crop_image_url: targetDetection?.crop_image_url || null,
         status: item.status,
         confidence: targetDetection?.confidence || 0,
+        highest_score: targetDetection?.highest_score ?? 0, // 🌟 최고 매칭 점수 전달
         // 수동 교정으로 즉시 전하기 위한 원본 디텍션 객체 참조 저장
         _raw_detection: targetDetection
     };

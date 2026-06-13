@@ -55,8 +55,8 @@ const onInput = (e: Event) => {
 
       <div class="bg-stone-50 p-2.5 rounded-lg text-[10px] text-stone-600 flex flex-col gap-1 font-mono">
         <div>🤖 <strong>AI OCR 결과:</strong> {{ editingBook?.ocr_call_number || '판독 불가' }}</div>
-        <div>🎯 <strong>YOLO Segmentation 신뢰도:</strong> {{ editingBook ? Math.round(editingBook.confidence) : 0
-          }}%</div>
+        <div>🎯 <strong>최고 매칭 점수:</strong> {{ editingBook ? Math.round(editingBook.highest_score) : 0
+          }}점</div>
       </div>
 
       <div class="flex flex-col gap-3">

@@ -112,12 +112,14 @@ def process_scan_session(session_id: str):
                     raw_title = ocr_result.get("title", "")
 
                     matched = None
+                    # 🌟 [추가됨] matcher.py가 산출한 최고 매칭 점수 (매칭 실패 시에도 최고 점수 보존)
+                    match_score = 0.0
                     if raw_call_number.strip() or raw_title.strip():
                         with timer.stage("DB 매칭"):
                             print(
                                 f"[{session_id}] 매칭 진행 ( OCR 청구기호: '{raw_call_number}', 제목: '{raw_title}')"
                             )
-                            matched = match_book_pipeline(db, raw_call_number, raw_title, limit=5)
+                            matched, match_score = match_book_pipeline(db, raw_call_number, raw_title, limit=5)
                     else:
                         print(f"[{session_id}] 청구기호 및 제목 OCR 모두 실패로 매칭 생략")
 
@@ -149,6 +151,8 @@ def process_scan_session(session_id: str):
                             if matched
                             else None,
                             "confidence": int(box.conf[0] * 100),
+                            # 🌟 [추가됨] matcher.py 최고 매칭 점수 (0~100, 소수점 포함)
+                            "highest_score": round(float(match_score), 2),
                             "crop_url": crop_url,
                         }
                     )
@@ -252,6 +256,8 @@ def process_scan_session(session_id: str):
                     detected_order=idx + 1,
                     status=result["status"],
                     confidence=result["confidence"],
+                    # 🌟 [추가됨] matcher.py 최고 매칭 점수 저장
+                    highest_score=result.get("highest_score", 0.0),
                     crop_image_url=result.get("crop_url"),
                 )
             )

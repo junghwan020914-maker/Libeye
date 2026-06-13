@@ -20,6 +20,7 @@ export interface DetectionResult {
   matched_title: string | null;       // 🚨 추가됨: DB 확정 도서명
   crop_image_url: string | null;
   confidence: number;
+  highest_score: number; // 🌟 추가됨: matcher.py 최고 매칭 점수 (0~100)
 }
 
 export interface SessionResponse {

@@ -44,8 +44,8 @@ const emit = defineEmits<{
                 <span class="bg-stone-500 text-white text-[8px] px-1 rounded">미인식</span> {{
                   d.ocr_call_number || '해독 불가' }}
               </div>
-              <div class="text-[10px] text-stone-500 mt-0.5">YOLO Segmentation 신뢰도 {{ Math.round(d.confidence)
-              }}%</div>
+              <div class="text-[10px] text-stone-500 mt-0.5">최고 매칭 점수 {{ Math.round(d.highest_score)
+              }}점</div>
             </div>
           </div>
           <button @click="emit('edit', d)"

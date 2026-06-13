@@ -91,7 +91,9 @@ async def get_scan_results(session_id: str, db: Session = Depends(get_db)):
             "expected_order": book_info.expected_order if book_info else None,
             "assigned_loc_id": book_info.assigned_loc_id if book_info else None,
             "crop_image_url": _to_proxy_path(r.crop_image_url),
-            "confidence": r.confidence
+            "confidence": r.confidence,
+            # 🌟 [추가됨] matcher.py 최고 매칭 점수 (인식 실패/완료 도서 모두 점수 확인용)
+            "highest_score": r.highest_score
         })
 
     location_warning = (

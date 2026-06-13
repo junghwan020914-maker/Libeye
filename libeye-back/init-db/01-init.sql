@@ -73,6 +73,8 @@ CREATE TABLE Scan_Result_Detail (
     crop_image_url VARCHAR(255),
 
     confidence DECIMAL(5,2),
+    -- 🌟 [추가됨] matcher.py가 산출한 최고 매칭 점수 (0~100, 매칭 실패 시에도 최고 점수 저장)
+    highest_score DECIMAL(5,2) DEFAULT 0,
     bounding_box JSONB,
     detected_order INT NOT NULL,
     status VARCHAR(20) NOT NULL,

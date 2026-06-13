@@ -1,4 +1,4 @@
-from typing import Iterable, Optional, List, Set
+from typing import Iterable, Optional, List, Set, Tuple
 
 from thefuzz import fuzz
 from jamo import h2j, j2hcj
@@ -66,16 +66,20 @@ def hybrid_book_matching_with_jamo(
     ocr_call_number: str,
     ocr_title: str,
     db_candidates: Iterable[BookMaster],
-) -> Optional[BookMaster]:
+) -> Tuple[Optional[BookMaster], float]:
     """
     [2단계 검색] 청구기호(일반 퍼지)와 도서명(자소 분리 퍼지)을 가중합한 하이브리드 매칭.
+
+    반환값: (best_match, highest_score)
+      - 매칭 성공 시: (확정 도서, 최고 점수)
+      - 매칭 실패 시: (None, 최고 점수)  ← 임계값 미달이어도 가장 높았던 점수를 함께 반환
     """
     # 청구기호와 제목 둘 다 비어있으면 매칭 불가
     clean_call = "" if isinstance(ocr_call_number, bool) else str(ocr_call_number or "").strip()
     safe_title = "" if isinstance(ocr_title, bool) else str(ocr_title or "").strip()
-    
+
     if not clean_call and not safe_title:
-        return None
+        return None, 0.0
 
     ocr_title_jamo = decompose_korean(safe_title)
 
@@ -130,16 +134,18 @@ def hybrid_book_matching_with_jamo(
             f"'{best_match.call_number}' / '{best_match.title}' "
             f"(점수 {highest_score:.1f})"
         )
-        return best_match
+        return best_match, highest_score
 
     print(f"[매칭 실패] '{clean_call}' / '{safe_title}' (최고 점수 {highest_score:.1f} < {MATCH_THRESHOLD})")
-    return None
+    return None, highest_score
 
 
-def match_book_pipeline(db: Session, ocr_call_number: str, ocr_title: str, limit: int = 5) -> Optional[BookMaster]:
+def match_book_pipeline(db: Session, ocr_call_number: str, ocr_title: str, limit: int = 5) -> Tuple[Optional[BookMaster], float]:
     """
     [통합 매칭 파이프라인]
     청구기호 기준 후보군과 제목 기준 후보군을 각각 추출하여 통합한 뒤 하이브리드 매칭을 수행합니다.
+
+    반환값: (best_match, highest_score) — 매칭 실패 시에도 최고 점수를 함께 반환합니다.
     """
     # 1. 청구기호 기준 및 제목 기준으로 후보군 검색
     candidates_by_call = get_top_candidates_by_call_number(db, ocr_call_number, limit=limit)
@@ -156,9 +162,9 @@ def match_book_pipeline(db: Session, ocr_call_number: str, ocr_title: str, limit
         
     combined_candidates = list(unique_candidates_map.values())
     
-    # 후보군이 전혀 없다면 바로 None 반환
+    # 후보군이 전혀 없다면 바로 None 반환 (최고 점수 0.0)
     if not combined_candidates:
-        return None
-        
+        return None, 0.0
+
     # 3. 통합 후보군을 대상으로 하이브리드 퍼지 매칭 실행
     return hybrid_book_matching_with_jamo(ocr_call_number, ocr_title, combined_candidates)

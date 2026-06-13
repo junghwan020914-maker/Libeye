@@ -89,6 +89,8 @@ class ScanResultDetail(Base):
     verification_method = Column(String(20), nullable=True)
 
     confidence = Column(Integer, default=0)
+    # 🌟 [신규 추가] matcher.py가 산출한 최고 매칭 점수 (0~100, 매칭 실패 시에도 최고 점수 저장)
+    highest_score = Column(Float, default=0)
     crop_image_url = Column(String(255), nullable=True)
 
     session = relationship("ScanSession", back_populates="results")
