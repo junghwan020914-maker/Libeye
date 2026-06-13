@@ -1,4 +1,4 @@
-from typing import Iterable, Optional, List
+from typing import Iterable, Optional, List, Set
 
 from thefuzz import fuzz
 from jamo import h2j, j2hcj
@@ -6,20 +6,19 @@ from sqlalchemy.orm import Session
 
 from models import BookMaster
 
-WEIGHT_CALL_NUM = 0.8
-WEIGHT_TITLE = 0.4
+WEIGHT_CALL_NUM = 0.5
+WEIGHT_TITLE = 0.5
 MATCH_THRESHOLD = 80.0
 
-def get_top_candidates(db: Session, ocr_call_number: str, limit: int = 5) -> List[BookMaster]:
+def get_top_candidates_by_call_number(db: Session, ocr_call_number: str, limit: int = 5) -> List[BookMaster]:
     """
-    [1단계 검색] PostgreSQL pg_trgm 확장의 <-> 연산자(Trigram 거리)를 사용하여
+    [1-A단계 검색] PostgreSQL pg_trgm 확장의 <-> 연산자를 사용하여
     전체 DB에서 청구기호가 가장 유사한 Top N개의 도서를 추출합니다.
     """
     clean_call = (ocr_call_number or "").strip()
     if not clean_call:
         return []
 
-    # <-> 연산자는 거리를 의미하므로, 오름차순(거리가 짧은 순)으로 정렬하여 가장 유사한 limit개를 가져옵니다.
     return (
         db.query(BookMaster)
         .order_by(BookMaster.call_number.op('<->')(clean_call))
@@ -28,13 +27,28 @@ def get_top_candidates(db: Session, ocr_call_number: str, limit: int = 5) -> Lis
     )
 
 
+def get_top_candidates_by_title(db: Session, ocr_title: str, limit: int = 5) -> List[BookMaster]:
+    """
+    [1-B단계 검색] PostgreSQL pg_trgm 확장의 <-> 연산자를 사용하여
+    전체 DB에서 도서명이 가장 유사한 Top N개의 도서를 추출합니다.
+    """
+    clean_title = (ocr_title or "").strip()
+    if not clean_title:
+        return []
+
+    return (
+        db.query(BookMaster)
+        .order_by(BookMaster.title.op('<->')(clean_title))
+        .limit(limit)
+        .all()
+    )
+
+
 def decompose_korean(text: str) -> str:
     """한글 텍스트를 초성·중성·종성(자소) 단위로 분해."""
-    # 💡 방어 로직: 텍스트가 비어있거나, LLM 환각으로 인해 bool 타입이 들어오면 빈 문자열 반환
     if not text or isinstance(text, bool):
         return ""
     
-    # 확실하게 문자열로 강제 변환
     text_str = str(text)
     try:
         return j2hcj(h2j(text_str))
@@ -50,34 +64,38 @@ def hybrid_book_matching_with_jamo(
     """
     [2단계 검색] 청구기호(일반 퍼지)와 도서명(자소 분리 퍼지)을 가중합한 하이브리드 매칭.
     """
-    # 💡 방어 로직: bool 타입이면 빈 문자열로 치환, 아니면 문자열로 변환 후 공백 제거
+    # 청구기호와 제목 둘 다 비어있으면 매칭 불가
     clean_call = "" if isinstance(ocr_call_number, bool) else str(ocr_call_number or "").strip()
+    safe_title = "" if isinstance(ocr_title, bool) else str(ocr_title or "").strip()
     
-    if not clean_call:
+    if not clean_call and not safe_title:
         return None
 
-    # 제목 역시 동일한 방어 로직 적용
-    safe_title = "" if isinstance(ocr_title, bool) else str(ocr_title or "").strip()
     ocr_title_jamo = decompose_korean(safe_title)
 
     best_match: Optional[BookMaster] = None
     highest_score = 0.0
 
     for book in db_candidates:
-        # 1. 청구기호 점수 계산
-        call_num_score = max(
-            fuzz.ratio(clean_call, book.call_number),
-            fuzz.partial_ratio(clean_call, book.call_number),
-            fuzz.token_sort_ratio(clean_call, book.call_number),
-        )
+        # 1. 청구기호 점수 계산 (OCR 결과가 있을 때만 계산, 없으면 0점)
+        if clean_call:
+            call_num_score = max(
+                fuzz.ratio(clean_call, book.call_number),
+                fuzz.partial_ratio(clean_call, book.call_number),
+                fuzz.token_sort_ratio(clean_call, book.call_number),
+            )
+        else:
+            call_num_score = 0.0
         
-        # 2. 제목 점수 계산 (길이 차이 극복을 위해 partial_ratio 추가)
-        db_title_jamo = decompose_korean(book.title)
-        
-        title_score = max(
-            fuzz.token_sort_ratio(ocr_title_jamo, db_title_jamo),
-            fuzz.partial_ratio(ocr_title_jamo, db_title_jamo)
-        )
+        # 2. 제목 점수 계산 (OCR 결과가 있을 때만 계산, 없으면 0점)
+        if safe_title:
+            db_title_jamo = decompose_korean(book.title)
+            title_score = max(
+                fuzz.token_sort_ratio(ocr_title_jamo, db_title_jamo),
+                fuzz.partial_ratio(ocr_title_jamo, db_title_jamo)
+            )
+        else:
+            title_score = 0.0
         
         # 3. 최종 가중합 산출
         final_score = call_num_score * WEIGHT_CALL_NUM + title_score * WEIGHT_TITLE
@@ -101,3 +119,31 @@ def hybrid_book_matching_with_jamo(
 
     print(f"[매칭 실패] '{clean_call}' / '{safe_title}' (최고 점수 {highest_score:.1f} < {MATCH_THRESHOLD})")
     return None
+
+
+def match_book_pipeline(db: Session, ocr_call_number: str, ocr_title: str, limit: int = 5) -> Optional[BookMaster]:
+    """
+    [통합 매칭 파이프라인]
+    청구기호 기준 후보군과 제목 기준 후보군을 각각 추출하여 통합한 뒤 하이브리드 매칭을 수행합니다.
+    """
+    # 1. 청구기호 기준 및 제목 기준으로 후보군 검색
+    candidates_by_call = get_top_candidates_by_call_number(db, ocr_call_number, limit=limit)
+    candidates_by_title = get_top_candidates_by_title(db, ocr_title, limit=limit)
+    
+    # 2. 두 후보군을 병합하되, ID 중복을 방지하기 위해 dict나 set을 활용하여 unique 리스트 생성
+    unique_candidates_map = {}
+    
+    for book in candidates_by_call:
+        unique_candidates_map[book.id] = book
+        
+    for book in candidates_by_title:
+        unique_candidates_map[book.id] = book
+        
+    combined_candidates = list(unique_candidates_map.values())
+    
+    # 후보군이 전혀 없다면 바로 None 반환
+    if not combined_candidates:
+        return None
+        
+    # 3. 통합 후보군을 대상으로 하이브리드 퍼지 매칭 실행
+    return hybrid_book_matching_with_jamo(ocr_call_number, ocr_title, combined_candidates)

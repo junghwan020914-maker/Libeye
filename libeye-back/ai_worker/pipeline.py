@@ -9,7 +9,7 @@ from config import CELERY_BROKER_URL, CELERY_RESULT_BACKEND, DATABASE_URL
 from storage import s3_client, ensure_buckets_exist, upload_image, download_image
 from service.detector import yolo_model, run_detection, crop_spine
 from service.ocr import extract_text_with_gemma
-from service.matcher import hybrid_book_matching_with_jamo, get_top_candidates
+from service.matcher import match_book_pipeline
 from service.misplacement import detect_misplacements
 from timing import get_logger, StageTimer
 
@@ -115,18 +115,9 @@ def process_scan_session(session_id: str):
                     if raw_call_number.strip():
                         with timer.stage("DB 매칭"):
                             print(
-                                f"[{session_id}] 1차 전역 DB 검색 (청구기호: {raw_call_number})"
+                                f"[{session_id}] 매칭 진행 ( OCR 청구기호: '{raw_call_number}', 제목: '{raw_title}')"
                             )
-                            top_candidates = get_top_candidates(
-                                db, raw_call_number, limit=5
-                            )
-
-                            print(
-                                f"[{session_id}] 2차 하이브리드 정밀 매칭 (후보 {len(top_candidates)}건)"
-                            )
-                            matched = hybrid_book_matching_with_jamo(
-                                raw_call_number, raw_title, top_candidates
-                            )
+                            matched = match_book_pipeline(db, raw_call_number, raw_title, limit=5)
                     else:
                         print(f"[{session_id}] 청구기호 OCR 실패로 매칭 생략")
 
