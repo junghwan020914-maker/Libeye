@@ -8,7 +8,7 @@ import boto3  # requests 대신 boto3 사용
 # 실제 구현된 함수명으로 올바르게 임포트
 from service.detector import run_detection, crop_spine
 from service.ocr import extract_text_with_gemma
-from service.matcher import get_top_candidates, hybrid_book_matching_with_jamo
+from service.matcher import match_book_pipeline
 from service.cart_sorter import CartSorter
 
 from database import SessionLocal
@@ -72,8 +72,7 @@ def process_cart_job(session_id: int, image_url: str):
                 # 정상적으로 인식된 경우에만 매칭 시도
                 if ocr_call_number and "인식실패" not in ocr_call_number:
                     # 8. 도서 매칭 (matcher.py - 1단계 & 2단계 하이브리드)
-                    candidates = get_top_candidates(db, ocr_call_number)
-                    best_match = hybrid_book_matching_with_jamo(ocr_call_number, ocr_title, candidates)
+                    best_match = match_book_pipeline(db, raw_call_number, raw_title, limit=5)
                     
                     if best_match:
                         raw_books.append({
