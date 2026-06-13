@@ -83,16 +83,18 @@ const shelfInventory = computed(() => {
     if (!sessionData.value?.expected_books) return [];
 
     return sessionData.value.expected_books.map((expectedBook: any) => {
-        // 탐지된 결과 중 이 책과 매칭된 데이터가 있는지 확인
-        const detection = sessionData.value.detections.find(
+        // 현재 도서 ID와 매칭된 탐지 결과들 필터링
+        const detections = sessionData.value.detections.filter(
             (d: any) => d.matched_book_id === expectedBook.book_id
         );
 
+        // 🌟 여러 개가 매칭되었다면 중복 오류 상태(DUPLICATE)로 인지
+        const isDuplicated = detections.length > 1;
+
         return {
             ...expectedBook,
-            detection: detection || null,
-            // 매칭된 결과가 없으면 MISSING (유실됨)
-            status: detection ? detection.status : 'MISSING'
+            detection: detections[0] || null,
+            status: isDuplicated ? 'DUPLICATE' : (detections.length > 0 ? detections[0].status : 'MISSING')
         };
     });
 });
@@ -110,6 +112,7 @@ const unexpectedDetections = computed(() => {
 
     return sessionData.value.detections.filter((d: any) =>
         d.status === 'UNKNOWN' ||
+        d.status === 'DUPLICATE' || // 🌟 중복 매칭 오류 도서도 수동 교정 대상 리스트에 포함
         (d.status === 'MISPLACED' && !expectedBookIds.has(d.matched_book_id))
     );
 });

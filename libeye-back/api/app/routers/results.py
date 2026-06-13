@@ -139,9 +139,18 @@ def force_match_detection(session_id: str, detection_id: str, req: MatchRequest,
     
     all_dets = db.query(ScanResultDetail).filter_by(session_id=session_id).order_by(ScanResultDetail.detected_order).all()
     
+    # 🚨 [신규 추가] 세션 내에서 중복 할당된 book_id 추출
+    matched_ids = [d.matched_book_id for d in all_dets if d.matched_book_id]
+    duplicate_book_ids = {bid for bid in matched_ids if matched_ids.count(bid) > 1}
+
     valid_seq = []
     for d in all_dets:
         if d.matched_book_id:
+            # 🚨 [신규 추가] 동일한 책에 중복 매칭된 경우 'DUPLICATE' 상태 부여 후 LIS 대상에서 제외
+            if d.matched_book_id in duplicate_book_ids:
+                d.status = 'DUPLICATE'
+                continue
+                
             b = db.query(BookMaster).filter_by(book_id=d.matched_book_id).first()
             if b.assigned_loc_id == session.location_id:
                 valid_seq.append((d, b.expected_order))
