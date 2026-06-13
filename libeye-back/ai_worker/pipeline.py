@@ -253,8 +253,9 @@ def process_scan_session(session_id: str):
                     # 5) 새 텍스트 결과가 있다면 다시 DB 하이브리드 매칭 시도
                     if raw_call_number.strip() or raw_title.strip():
                         print(f"[{session_id}] 2차 OCR 획득 -> 청구기호: '{raw_call_number}', 제목: '{raw_title}'")
-                        matched = match_book_pipeline(db, raw_call_number, raw_title, limit=5)
-                        
+                        # 🌟 match_book_pipeline은 (best_match, highest_score) 튜플을 반환하므로 언팩
+                        matched, match_score = match_book_pipeline(db, raw_call_number, raw_title, limit=5)
+
                         if matched:
                             print(f"[{session_id}] 🎉 [구제 성공] 2차 재인식 매칭 완료: {matched.title}")
                             # 기존 구조체 정보 갱신
@@ -263,6 +264,8 @@ def process_scan_session(session_id: str):
                             r["matched_title"] = matched.title
                             r["assigned_loc_id"] = matched.assigned_loc_id
                             r["expected_order"] = matched.expected_order
+                            # 🌟 2차 재매칭으로 구제된 점수로 갱신
+                            r["highest_score"] = round(float(match_score), 2)
                             r["raw_ocr_data"] = ocr_result  # 보정된 OCR 데이터로 교체
             
             # 6-B. 재매칭 성공 도서들이 생겼으므로, 오배열 판별(status 및 누락 등) 최종 갱신
