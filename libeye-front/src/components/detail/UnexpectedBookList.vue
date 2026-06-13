@@ -52,6 +52,25 @@ const emit = defineEmits<{
             class="bg-stone-800 text-white px-3 py-1.5 rounded text-[10px] font-bold shadow shrink-0">수동교정</button>
         </div>
 
+        <div v-else-if="d.status === 'DUPLICATE'"
+          class="bg-orange-50 p-3 rounded-lg border border-orange-300 flex items-center justify-between shadow-sm">
+          <div class="flex items-center gap-3" @click="emit('select', d)">
+            <img v-if="d.crop_image_url" :src="d.crop_image_url"
+              class="w-8 h-12 object-cover rounded shadow-sm border border-orange-400" />
+            <div>
+              <div class="text-xs font-bold text-orange-900 flex items-center gap-1">
+                <span class="bg-red-500 text-white text-[8px] px-1 rounded">중복매칭</span>
+                {{ d.ocr_call_number || d.ocr_title || '도서명 미상' }}
+              </div>
+              <div class="text-[10px] text-orange-800 mt-1 bg-white inline-block px-2 py-0.5 rounded border border-orange-200">
+                인식 청구기호: <strong>{{ d.ocr_call_number || '판독불가' }}</strong>
+              </div>
+            </div>
+          </div>
+          <button @click.stop="emit('edit', d)"
+            class="bg-orange-600 text-white px-3 py-1.5 rounded text-[10px] font-bold shadow shrink-0 ml-2">수동교정</button>
+        </div>
+
       </template>
     </div>
   </section>
