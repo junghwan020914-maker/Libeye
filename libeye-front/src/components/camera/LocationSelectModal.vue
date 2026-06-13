@@ -123,7 +123,7 @@ const handleFinalSelect = (row: number, section: string, level: number) => {
             class="flex-1 bg-stone-800 hover:bg-stone-750 border border-stone-700 rounded-lg flex flex-col items-center justify-center p-1 active:bg-stone-600 transition-all text-center group"
           >
             <span class="text-white font-extrabold text-xs group-active:text-green-400">
-              {{ level }}단 칸
+              {{ level }}단
             </span>
             <span class="text-[9px] text-green-500 font-medium tracking-tighter mt-0.5 opacity-80">
               📸 촬영시작

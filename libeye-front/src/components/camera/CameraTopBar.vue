@@ -9,12 +9,14 @@ const router = useRouter();
 <template>
   <div class="absolute top-0 w-full z-20 p-4 flex justify-between items-center bg-gradient-to-b from-black/60 to-transparent pb-10 text-white">
     <button @click="router.push('/')" class="text-2xl px-2">◀</button>
+    
     <div class="text-center" v-if="selectedLocation">
       <h1 class="text-sm font-bold">{{ selectedLocation }}</h1>
       <p v-if="!isCropping" class="text-[10px] text-white/70">가이드라인에 맞춰 서가를 촬영해주세요</p>
       <p v-else class="text-[10px] text-white/70">드래그하여 크롭 조절 및 중앙 터치로 상자 이동이 가능합니다</p>
     </div>
-    <button class="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center text-xl active:bg-white/40">⚡</button>
+    
+    <div class="w-10"></div>
   </div>
 </template>
 
