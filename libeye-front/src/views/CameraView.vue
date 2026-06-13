@@ -132,28 +132,7 @@ const takePhoto = async () => {
     };
     img.src = previewUrlStr;
   }, 'image/png');
-};
-
-  // 💡 [Fallback] ImageCapture 미지원 기기(일부 구형 웹뷰)일 경우에만 기존 캔버스 캡처 수행
-  if (!videoRef.value || !canvasRef.value) return;
-  const video = videoRef.value;
-  const canvas = canvasRef.value;
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
-  ctx.drawImage(video, 0, 0);
-  
-  canvas.toBlob((blob) => {
-    if (!blob) return;
-    stopCamera();
-    const file = blobToFile(blob, `camera_${Date.now()}.png`);
-    const previewUrlStr = URL.createObjectURL(blob);
-    capturedFiles.value.push(file);
-    capturedPreviews.value.push(previewUrlStr);
-    isConfirming.value = true;
-  }, 'image/png');
-};
+}; 
 
 const triggerFileUpload = () => {
   if (fileInputRef.value) fileInputRef.value.click();
