@@ -56,8 +56,9 @@ const { cropBox, hasCropBox, cropRect, startCropDrag, moveCropDrag, endCropDrag 
 const takePhoto = async () => {
   if (imageCapture.value) {
     try {
+      // 기기가 지원하는 최대 해상도로 사진 촬영
       const blob = await imageCapture.value.takePhoto({
-        imageWidth: 4032,
+        imageWidth: 4032,  // 💡 원하는 최대 해상도 지정 (기기 스펙에 맞춰 최적화됨)
         imageHeight: 3024
       });
 
@@ -67,9 +68,9 @@ const takePhoto = async () => {
       const previewUrlStr = URL.createObjectURL(blob);
       previewUrl.value = previewUrlStr;
       
-      // 🚀 크롭 단계 활성화
+      // 🚀 바로 확인 시트로 가지 않고 크롭 단계 활성화
       isCropping.value = true;
-      hasCropBox.value = true;
+      hasCropBox.value = true; // 기본 가이드라인 박스 활성화
 
       // HTML <img> 엘리먼트를 생성해 크롭용 원본 이미지 참조 바인딩
       const img = new Image();
@@ -78,7 +79,7 @@ const takePhoto = async () => {
         if (imageContainerRef.value) {
           const cw = imageContainerRef.value.clientWidth;
           const ch = imageContainerRef.value.clientHeight;
-          // 화면 중앙에 적당히 크롭 가이드라인 레이아웃 초기 배치
+          // 처음에 적당히 중앙에 크롭 가이드라인 배치
           cropBox.value = {
             x1: cw * 0.1,
             y1: ch * 0.2,
@@ -88,13 +89,13 @@ const takePhoto = async () => {
         }
       };
       img.src = previewUrlStr;
-      return; 
+      return; // 고해상도 촬영 성공 시 아래 캔버스 로직은 타지 않음
     } catch (err) {
       console.error("High-res capture failed, falling back to canvas:", err);
     }
   }
 
-  // 💡 [Fallback] ImageCapture 미지원 기기용 Canvas 캡처 로직도 동일하게 수정
+  // 💡 [Fallback] ImageCapture 미지원 기기(일부 구형 웹뷰)일 경우에만 기존 캔버스 캡처 수행
   if (!videoRef.value || !canvasRef.value) return;
   const video = videoRef.value;
   const canvas = canvasRef.value;
