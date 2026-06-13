@@ -26,7 +26,7 @@ const emit = defineEmits<{
 
     <div class="flex flex-col gap-4 w-full max-w-sm mt-auto pb-10">
       <button @click="emit('take-another')" class="w-full py-4 bg-stone-800 text-white border border-stone-600 rounded-2xl font-bold text-lg active:bg-stone-700 transition-colors">
-        ➕ 다음 칸 이어서 촬영
+        ➕ 추가 촬영
       </button>
 
       <button @click="emit('upload-all')" :disabled="isUploading" class="w-full py-5 bg-[#4CAF50] text-white rounded-2xl font-black text-xl active:scale-95 transition-all shadow-[0_0_20px_rgba(76,175,80,0.3)] disabled:opacity-50">

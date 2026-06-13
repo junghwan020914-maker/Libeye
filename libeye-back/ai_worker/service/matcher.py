@@ -15,8 +15,11 @@ def get_top_candidates_by_call_number(db: Session, ocr_call_number: str, limit: 
     [1-A단계 검색] PostgreSQL pg_trgm 확장의 <-> 연산자를 사용하여
     전체 DB에서 청구기호가 가장 유사한 Top N개의 도서를 추출합니다.
     """
-    clean_call = (ocr_call_number or "").strip()
-    if not clean_call:
+    # ✨ 어떤 타입(float, bool 등)이 들어와도 안전하게 문자열로 변환 후 strip 처리
+    clean_call = "" if isinstance(ocr_call_number, bool) else str(ocr_call_number or "").strip()
+    
+    # NaN 결측치가 문자열 "nan"으로 변환된 경우도 빈 값으로 처리하여 검색에서 제외합니다.
+    if not clean_call or clean_call.lower() == "nan":
         return []
 
     return (
@@ -32,8 +35,11 @@ def get_top_candidates_by_title(db: Session, ocr_title: str, limit: int = 5) -> 
     [1-B단계 검색] PostgreSQL pg_trgm 확장의 <-> 연산자를 사용하여
     전체 DB에서 도서명이 가장 유사한 Top N개의 도서를 추출합니다.
     """
-    clean_title = (ocr_title or "").strip()
-    if not clean_title:
+    # ✨ 어떤 타입(float, bool 등)이 들어와도 안전하게 문자열로 변환 후 strip 처리
+    clean_title = "" if isinstance(ocr_title, bool) else str(ocr_title or "").strip()
+    
+    # NaN 결측치가 문자열 "nan"으로 변환된 경우도 빈 값으로 처리하여 검색에서 제외합니다.
+    if not clean_title or clean_title.lower() == "nan":
         return []
 
     return (
