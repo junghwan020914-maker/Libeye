@@ -209,11 +209,64 @@ def process_scan_session(session_id: str):
 
         # 6. 병합된 전체 리스트를 통해 오배열 판별
         # location_id가 없으면 detect_misplacements 내부에서 다수결로 추론
+        # 6. 병합된 전체 리스트를 통해 오배열 판별
         print(f"[{session_id}] 6. 오배열 판별 (총 {len(global_results)}권 병합됨)")
         with timer.stage("오배열 판별"):
             final_results, resolved_loc, inferred_loc = detect_misplacements(
                 global_results, session.location_id if session else None
             )
+
+        # 🚨 [새로 추가된 영역] 6-A. 미매칭 도서 대상 Gemma OCR 재시도 및 보정 파이프라인
+        unmatched_books = [r for r in final_results if r.get("matched_book_id") is None]
+        
+        if unmatched_books:
+            print(f"[{session_id}] -> 1차 매칭 실패 도서 {len(unmatched_books)}권 발견. 2차 재인식(Retry) 가동")
+            
+            # 재인식 전용 함수 임포트
+            from service.ocr import extract_text_with_gemma_retry
+            
+            with timer.stage("미매칭 도서 2차 OCR 및 재매칭"):
+                for r in unmatched_books:
+                    # 1) crop_url에서 파일명(Key) 추출 (기존 original_file_name 방식 준용)
+                    crop_file_name = r["crop_url"].split("crop-bucket/")[-1]
+                    
+                    # 2) 저장소(MinIO/S3)에서 크롭된 이미지 다시 다운로드
+                    crop_img = download_image("crop-bucket", crop_file_name)
+                    if crop_img is None:
+                        print(f"[{session_id}] 크롭 이미지 다운로드 실패로 스킵: {crop_file_name}")
+                        continue
+                    
+                    # 3) 다시 Base64 인코딩
+                    _, buf = cv2.imencode(".jpg", crop_img)
+                    b64 = base64.b64encode(buf).decode("utf-8")
+                    
+                    # 4) 보정용 프롬프트 기반 Gemma OCR 재호출
+                    ocr_result = extract_text_with_gemma_retry(b64)
+                    
+                    raw_call_number = ocr_result.get("call_number", "")
+                    raw_title = ocr_result.get("title", "")
+                    
+                    # 5) 새 텍스트 결과가 있다면 다시 DB 하이브리드 매칭 시도
+                    if raw_call_number.strip() or raw_title.strip():
+                        print(f"[{session_id}] 2차 OCR 획득 -> 청구기호: '{raw_call_number}', 제목: '{raw_title}'")
+                        matched = match_book_pipeline(db, raw_call_number, raw_title, limit=5)
+                        
+                        if matched:
+                            print(f"[{session_id}] 🎉 [구제 성공] 2차 재인식 매칭 완료: {matched.title}")
+                            # 기존 구조체 정보 갱신
+                            r["matched_book_id"] = matched.book_id
+                            r["matched_call_number"] = matched.call_number
+                            r["matched_title"] = matched.title
+                            r["assigned_loc_id"] = matched.assigned_loc_id
+                            r["expected_order"] = matched.expected_order
+                            r["raw_ocr_data"] = ocr_result  # 보정된 OCR 데이터로 교체
+            
+            # 6-B. 재매칭 성공 도서들이 생겼으므로, 오배열 판별(status 및 누락 등) 최종 갱신
+            print(f"[{session_id}] 6-B. 재인식 결과 반영하여 최종 오배열 재판별")
+            with timer.stage("최종 오배열 재판별"):
+                final_results, resolved_loc, inferred_loc = detect_misplacements(
+                    final_results, session.location_id if session else None
+                )
 
         # location_id가 없었던 경우 추론된 값을 세션에 저장
         if session and not session.location_id and resolved_loc:
