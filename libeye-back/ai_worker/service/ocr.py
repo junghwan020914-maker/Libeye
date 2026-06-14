@@ -20,14 +20,22 @@ _MAX_RETRIES = 2
 
 _PROMPT = """
 You are a library assistant. Examine the image of the book spine.
-Extract the 'call_number' (e.g., 813.6 김12가) and the 'title'.
-'call_number' and the 'title' can be in any orientation.
-They may be partially obscured or damaged, so do your best to infer them from visible clues.
+Extract the 'call_number' and the 'title'.
+'call_number' and the 'title' can be in any orientation, partially obscured, or damaged. Do your best to infer them from visible clues.
+
+CRITICAL: The 'call_number' follows specific library cataloging structures. It can include decimal numbers, Korean characters, English alphabets, and volume/copy suffixes.
+Examples of valid 'call_number' formats from our library database:
+1. Standard Domestic: "001.3 박72ㅂ" or "001.309 성69ㅂ"
+2. With Volume/Copy suffix: "001.3 박95ㅁ v.2", "001.3 박819ㄷc.2", or "001.3 백51ㅌ v.1 c.2"
+3. Western/Translated Author style: "001.3 A956m강" or "001.3 C284w한"
+4. Deep Classification: "001.3028563 최72a"
+
+Always preserve the spaces, dots, and lowercase suffixes (like v.1, c.2) exactly as they appear or should be structured.
 If you cannot confidently identify either, return an empty string for that field.
+
 Respond strictly in JSON format like this:
 {"call_number": "extracted text", "title": "extracted text"}
-If you cannot read it, return empty strings.
-DO NOT include any extra notes, descriptions, or comments about text orientation (e.g., 'Note: Title is vertical'). Just output the exact text you see.
+DO NOT include any extra notes, descriptions, or comments. Just output the exact JSON.
 """
 # num_predict 한도에 걸려 잘린 시도를 나타내는 센티널
 _TRUNCATED = object()
@@ -35,7 +43,15 @@ _TRUNCATED = object()
 # 🚨 2차 시도용 강력한 보정 프롬프트
 _RETRY_PROMPT = """
 You are an expert library assistant. This is a SECOND ATTEMPT to read a challenging book spine image that failed in the first round.
-Examine the image extremely carefully. Even if the text is blurry, small, rotated, or partially damaged, try your absolute best to infer the 'call_number' and 'title' from visible clues.
+Examine the image extremely carefully. Even if the text is blurry, small, rotated, or partially damaged, try your absolute best to infer the 'call_number' and 'title'.
+
+Remember, the 'call_number' strictly fits into one of these real patterns:
+- "001.3 박72ㅂ" (Standard)
+- "001.3 백51ㅌ v.1 c.2" (With Volume/Copy)
+- "001.3 A956m강" (Alphabet mixed author code)
+- "001.3028563 최72a" (Long decimal classification)
+
+Pay extra attention to small characters like 'v.1', 'c.2', or leading English letters in the author code on the spine label.
 Respond strictly in JSON format like this:
 {"call_number": "extracted text", "title": "extracted text"}
 If you cannot read it at all, return empty strings. DO NOT include any extra notes or explanations.
