@@ -80,6 +80,7 @@ CREATE TABLE Scan_Result_Detail (
     status VARCHAR(20) NOT NULL,
     -- 🚨 [추가됨] 프론트엔드에서 오배열 확인(조치) 완료 여부
     is_verified BOOLEAN DEFAULT FALSE
+    verification_method VARCHAR(20) DEFAULT NULL
 );
 
 -- 3.4 수동 수정 이력 테이블 (Manual_Correction)
