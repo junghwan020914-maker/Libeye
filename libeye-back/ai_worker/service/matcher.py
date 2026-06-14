@@ -99,7 +99,7 @@ def hybrid_book_matching_with_jamo(
         
         # 2. 제목 점수 계산 (OCR 결과가 있을 때만 계산, 없으면 0점)
         if safe_title:
-            db_title_jamo = decompose_korean(safe_title)
+            db_title_jamo = decompose_korean(book.title)
             
             # 🛠️ [방어 로직 추가] OCR 제목이 지나치게 짧은 경우 오작동 방지
             clean_title_len = len(safe_title.strip())
