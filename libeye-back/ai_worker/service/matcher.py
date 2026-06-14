@@ -104,14 +104,14 @@ def hybrid_book_matching_with_jamo(
             # 🛠️ [방어 로직 추가] OCR 제목이 지나치게 짧은 경우 오작동 방지
             clean_title_len = len(safe_title.strip())
             
-            if clean_title_len > 1:
+            if clean_title_len > 5:
                 # 일반적인 상황: 부분 일치(partial_ratio) 허용
                 title_score = max(
                     fuzz.token_sort_ratio(ocr_title_jamo, db_title_jamo),
                     fuzz.partial_ratio(ocr_title_jamo, db_title_jamo)
                 )
             else:
-                # 🚨 1글자 이하(노이즈 혹은 단일 글자)일 때는 partial_ratio를 제외!
+                # 🚨 5글자 이하(노이즈 혹은 단일 글자)일 때는 partial_ratio를 제외!
                 # 전체적인 자소 구성 비율만 따지도록 하여 '느낌의 0도' 같은 긴 제목이 만점 받는 것을 방지합니다.
                 title_score = fuzz.token_sort_ratio(ocr_title_jamo, db_title_jamo)
         else:
