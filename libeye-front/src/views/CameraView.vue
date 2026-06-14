@@ -143,31 +143,31 @@ const handleFileUpload = (e: Event) => {
   if (!target.files || target.files.length === 0) return;
 
   const file = target.files[0];
-  const reader = new FileReader();
-  reader.onload = (ev) => {
-    stopCamera();
-    previewUrl.value = ev.target?.result as string;
-    isCropping.value = true;
-    hasCropBox.value = true; // 기본 가이드라인 박스 활성화
+  stopCamera();
 
-    const img = new Image();
-    img.onload = () => {
-      uploadedImage.value = img;
-      if (imageContainerRef.value) {
-        const cw = imageContainerRef.value.clientWidth;
-        const ch = imageContainerRef.value.clientHeight;
-        // 처음에 적당히 중앙에 크롭 가이드라인 배치
-        cropBox.value = {
-          x1: cw * 0.1,
-          y1: ch * 0.2,
-          x2: cw * 0.9,
-          y2: ch * 0.8
-        };
-      }
-    };
-    img.src = previewUrl.value as string;
+  // 💡 개선: FileReader 대신 URL.createObjectURL을 사용하여 원본 Blob 스트림을 그대로 활용합니다.
+  // 이로 인해 대용량 이미지 변환 시 모바일 브라우저가 강제로 화질을 낮추는 부작용을 막아줍니다.
+  const previewUrlStr = URL.createObjectURL(file);
+  previewUrl.value = previewUrlStr;
+  isCropping.value = true;
+  hasCropBox.value = true; // 기본 가이드라인 박스 활성화
+
+  const img = new Image();
+  img.onload = () => {
+    uploadedImage.value = img;
+    if (imageContainerRef.value) {
+      const cw = imageContainerRef.value.clientWidth;
+      const ch = imageContainerRef.value.clientHeight;
+      // 처음에 적당히 중앙에 크롭 가이드라인 배치
+      cropBox.value = {
+        x1: cw * 0.1,
+        y1: ch * 0.2,
+        x2: cw * 0.9,
+        y2: ch * 0.8
+      };
+    }
   };
-  reader.readAsDataURL(file);
+  img.src = previewUrlStr;
 };
 
 const applyCropAndUpload = async () => {
@@ -217,7 +217,14 @@ const applyCropAndUpload = async () => {
   canvas.width = Math.floor(sourceW);
   canvas.height = Math.floor(sourceH);
 
+  // 💡 추가 1: Canvas에 고해상도 원본을 그릴 때 보간 화질을 최대로 설정합니다.
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+
   ctx.drawImage(uploadedImage.value, sourceX, sourceY, sourceW, sourceH, 0, 0, canvas.width, canvas.height);
+  
+  // 💡 추가 2: 이중 압축 손실(Generational Loss)을 방지하기 위해 JPEG 퀄리티를 0.92 -> 0.98로 상향합니다.
+  // 이미 크롭되어 해상도가 작아진 상태이므로 0.98로 인코딩해도 용량 압박이 매우 적으며 화질은 보존됩니다.
   canvas.toBlob((blob) => {
     if (!blob) {
       alert('이미지 크롭에 실패했습니다.');
@@ -230,15 +237,24 @@ const applyCropAndUpload = async () => {
     capturedFiles.value.push(file);
     capturedPreviews.value.push(croppedPreviewUrl);
 
+    // 💡 메모리 관리: 업로드 파일용으로 생성했던 원본 ObjectURL 메모리를 해제해줍니다.
+    if (previewUrl.value && previewUrl.value.startsWith('blob:')) {
+      URL.revokeObjectURL(previewUrl.value);
+    }
+
     isCropping.value = false;
     previewUrl.value = null;
     isConfirming.value = true;
-  }, 'image/jpeg', 0.92);
+  }, 'image/jpeg', 1.0);
 };
 
 // 크롭 취소 (기존 인라인 핸들러를 메서드로 분리)
 const cancelCrop = () => {
   isCropping.value = false;
+  // 💡 업로드/촬영으로 생성된 임시 blob URL 오브젝트 해제
+  if (previewUrl.value && previewUrl.value.startsWith('blob:')) {
+    URL.revokeObjectURL(previewUrl.value);
+  }
   previewUrl.value = null;
   startCamera();
 };
