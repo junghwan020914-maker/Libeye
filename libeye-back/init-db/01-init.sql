@@ -85,7 +85,7 @@ CREATE TABLE Scan_Result_Detail (
 
 -- 3.4 수동 수정 이력 테이블 (Manual_Correction)
 CREATE TABLE Manual_Correction (
-    correction_id VARCHAR(50) PRIMARY KEY DEFAULT VARCHAR(50),
+    correction_id VARCHAR(50) PRIMARY KEY,
     detection_id VARCHAR(50) REFERENCES Scan_Result_Detail(detection_id),
     user_id VARCHAR(50) NOT NULL,
     corrected_book_id VARCHAR(50) REFERENCES Book_Master(book_id),
@@ -131,4 +131,4 @@ CREATE INDEX idx_scan_result_session_status ON Scan_Result_Detail (session_id, s
 CREATE INDEX idx_book_master_call_num_trgm ON Book_Master USING gin (call_number gin_trgm_ops);
 
 -- (선택) 상태값 기준 조회가 빈번할 경우를 대비한 기본 인덱스
-CREATE INDEX idx_scan_session_status ON Scan_Session (overall_status);
+CREATE INDEX idx_scan_session_status ON Scan_Session (status);
