@@ -87,11 +87,11 @@ def hybrid_book_matching_with_jamo(
     highest_score = 0.0
 
     for book in db_candidates:
-        # 1. 청구기호 점수 계산 (OCR 결과가 있을 때만 계산, 없으면 0점)
+        # 1. 청구기호 점수 계산 (🚨 복본 구분을 위해 partial_ratio 제외)
+        # 청구기호는 서적의 고유 주소이므로, substring 일치(partial_ratio)를 허용하면 복본 오탐지가 발생합니다.
         if clean_call:
             call_num_score = max(
                 fuzz.ratio(clean_call, book.call_number),
-                fuzz.partial_ratio(clean_call, book.call_number),
                 fuzz.token_sort_ratio(clean_call, book.call_number),
             )
         else:
@@ -137,6 +137,15 @@ def hybrid_book_matching_with_jamo(
         if final_score > highest_score:
             highest_score = final_score
             best_match = book
+
+        elif final_score == highest_score and highest_score > 0:
+            # 🚨 [핵심 수정 기법] 점수가 완전히 같을 경우, 
+            # 청구기호의 순수 전체 일치율(fuzz.ratio)이 더 높은 진짜 복본 도서를 선택합니다.
+            current_exact_ratio = fuzz.ratio(clean_call, book.call_number)
+            best_exact_ratio = fuzz.ratio(clean_call, best_match.call_number) if best_match else 0
+            
+            if current_exact_ratio > best_exact_ratio:
+                best_match = book
       
 
     if best_match is not None and highest_score >= MATCH_THRESHOLD:
