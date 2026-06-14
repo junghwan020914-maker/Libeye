@@ -245,7 +245,7 @@ const applyCropAndUpload = async () => {
     isCropping.value = false;
     previewUrl.value = null;
     isConfirming.value = true;
-  }, 'image/png);
+  }, 'image/png');
 };
 
 // 크롭 취소 (기존 인라인 핸들러를 메서드로 분리)
