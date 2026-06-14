@@ -131,7 +131,7 @@ const takePhoto = async () => {
       }
     };
     img.src = previewUrlStr;
-  }, 'image/jpeg', 0.92);
+  }, 'image/png);
 }; 
 
 const triggerFileUpload = () => {
@@ -231,7 +231,7 @@ const applyCropAndUpload = async () => {
       return;
     }
 
-    const file = blobToFile(blob, `crop_${Date.now()}.jpeg`);
+    const file = blobToFile(blob, `crop_${Date.now()}.png`);
     const croppedPreviewUrl = URL.createObjectURL(blob);
 
     capturedFiles.value.push(file);
@@ -245,7 +245,7 @@ const applyCropAndUpload = async () => {
     isCropping.value = false;
     previewUrl.value = null;
     isConfirming.value = true;
-  }, 'image/jpeg', 0.99);
+  }, 'image/png);
 };
 
 // 크롭 취소 (기존 인라인 핸들러를 메서드로 분리)
@@ -293,8 +293,8 @@ const uploadAll = async () => {
 const simulateCapture = async () => {
   isUploading.value = true;
   try {
-    const dummyDataUrl = "data:image/jpeg;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=";
-    const file = dataURLtoFile(dummyDataUrl, 'dummy.jpeg');
+    const dummyDataUrl = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=";
+    const file = dataURLtoFile(dummyDataUrl, 'dummy.png');
 
     const response = await startSession(selectedLocation.value || 'UNKNOWN', [file]);
     router.push({ name: 'detail', query: { sessionId: response.session_id } });
