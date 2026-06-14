@@ -131,7 +131,7 @@ const takePhoto = async () => {
       }
     };
     img.src = previewUrlStr;
-  }, 'image/png);
+  }, 'image/png');
 }; 
 
 const triggerFileUpload = () => {
