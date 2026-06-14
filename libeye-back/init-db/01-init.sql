@@ -79,7 +79,7 @@ CREATE TABLE Scan_Result_Detail (
     detected_order INT NOT NULL,
     status VARCHAR(20) NOT NULL,
     -- 🚨 [추가됨] 프론트엔드에서 오배열 확인(조치) 완료 여부
-    is_verified BOOLEAN DEFAULT FALSE
+    is_verified BOOLEAN DEFAULT FALSE,
     verification_method VARCHAR(20) DEFAULT NULL
 );
 
