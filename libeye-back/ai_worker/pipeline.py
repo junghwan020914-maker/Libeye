@@ -97,11 +97,11 @@ def process_scan_session(session_id: str):
                     # 3. 마스크 크롭 + MinIO 업로드 (🚨수정됨: 이름 충돌 방지를 위해 image_id 추가)
                     with timer.stage("크롭+업로드"):
                         crop_img = crop_spine(img, box, masks, idx)
-                        crop_key = f"{session_id}_{img_record.image_id}_crop_{idx}.jpg"
+                        crop_key = f"{session_id}_{img_record.image_id}_crop_{idx}.png"
                         crop_url = upload_image("crop-bucket", crop_key, crop_img)
 
                     # 4. Gemma OCR
-                    _, buf = cv2.imencode(".jpg", crop_img)
+                    _, buf = cv2.imencode(".png", crop_img)
                     b64 = base64.b64encode(buf).decode("utf-8")
                     print(f"[{session_id}] OCR 요청 중 (crop {idx})")
                     with timer.stage("OCR"):
@@ -248,7 +248,7 @@ def process_scan_session(session_id: str):
                         continue
                     
                     # 3) 다시 Base64 인코딩
-                    _, buf = cv2.imencode(".jpg", crop_img)
+                    _, buf = cv2.imencode(".png", crop_img)
                     b64 = base64.b64encode(buf).decode("utf-8")
                     
                     # 4) 보정용 프롬프트 기반 Gemma OCR 재호출

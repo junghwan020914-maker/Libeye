@@ -24,12 +24,16 @@ def ensure_buckets_exist() -> None:
 
 def upload_image(bucket: str, key: str, cv2_img: np.ndarray) -> str | None:
     try:
-        _, buf = cv2.imencode(".jpg", cv2_img)
+        # 파일 키의 확장자에 맞게 인코딩 포맷 및 ContentType 선택
+        ext = ".png" if key.lower().endswith(".png") else ".jpg"
+        content_type = "image/png" if ext == ".png" else "image/jpeg"
+        
+        _, buf = cv2.imencode(ext, cv2_img)
         s3_client.put_object(
             Bucket=bucket,
             Key=key,
             Body=buf.tobytes(),
-            ContentType="image/jpeg",
+            ContentType=content_type,
         )
         return f"{MINIO_ENDPOINT}/{bucket}/{key}"
     except Exception as e:
