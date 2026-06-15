@@ -44,7 +44,11 @@ class ScanSession(Base):
 
     total_books = Column(Integer, default=0)
     misplaced_count = Column(Integer, default=0)
+    # unknown_count는 ocr_failed_count + match_failed_count의 합 (하위 호환/분석 대시보드용으로 유지)
     unknown_count = Column(Integer, default=0)
+    # 🌟 [신규 추가] 인식 실패 원인 세분화 통계용 컬럼
+    ocr_failed_count = Column(Integer, default=0)    # OCR 자체 실패 (텍스트 추출 불가)
+    match_failed_count = Column(Integer, default=0)  # OCR은 됐으나 DB 매칭 실패
     inferred_location_id = Column(String(50), nullable=True)
     elapsed_sec = Column(Float, nullable=True)
 

@@ -46,7 +46,9 @@ CREATE TABLE Scan_Session (
     -- 세션 완료 시 파이프라인이 채워주는 집계 컬럼
     total_books INT DEFAULT 0,               -- YOLO가 탐지한 총 책 권수
     misplaced_count INT DEFAULT 0,           -- 오배열 책 수 (MISPLACED)
-    unknown_count INT DEFAULT 0,             -- 인식 실패 수 (UNKNOWN)
+    unknown_count INT DEFAULT 0,             -- 인식 실패 총합 (ocr_failed_count + match_failed_count)
+    ocr_failed_count INT DEFAULT 0,          -- OCR 자체 실패 수 (텍스트 추출 불가, OCR_FAILED)
+    match_failed_count INT DEFAULT 0,        -- OCR은 됐으나 DB 매칭 실패 수 (MATCH_FAILED)
     inferred_location_id VARCHAR(50),        -- 책 다수결로 추론된 실제 서가 ID (선택한 서가와 다를 때만 저장)
     elapsed_sec FLOAT                        -- 파이프라인 총 소요시간 (초)
 );

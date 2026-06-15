@@ -349,9 +349,10 @@ def process_scan_session(session_id: str):
         # MISSING은 탐지된 책이 아니라 DB에서 추론된 누락이므로 total_books에서 제외
         total_books = len(final_results)
         misplaced_count = sum(1 for r in final_results if r["status"] == "MISPLACED")
-        # 💡 [수정] 세분화된 상태 개수를 집계하되, 기존 DB 스키마 호환을 위해 unknown_count에 합산
+        # 💡 [수정] 인식 실패 원인을 OCR 실패 / DB 매칭 실패로 세분화하여 각각 집계
         ocr_failed_count = sum(1 for r in final_results if r["status"] == "OCR_FAILED")
         match_failed_count = sum(1 for r in final_results if r["status"] == "MATCH_FAILED")
+        # unknown_count는 두 실패의 합 (하위 호환/분석 대시보드용으로 유지)
         unknown_count = ocr_failed_count + match_failed_count
 
         if session:
@@ -359,6 +360,9 @@ def process_scan_session(session_id: str):
             session.total_books = total_books
             session.misplaced_count = misplaced_count
             session.unknown_count = unknown_count
+            # 🌟 [신규] 세분화 통계를 세션에 각각 저장
+            session.ocr_failed_count = ocr_failed_count
+            session.match_failed_count = match_failed_count
             session.elapsed_sec = timer.elapsed()
 
         # 9. DailyAnalytics upsert — 날짜별 집계 캐시 갱신 (주간 차트용)

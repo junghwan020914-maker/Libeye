@@ -81,9 +81,14 @@ def recalculate_session_status(session_id: str, db: Session):
     # 4. ScanSession 대시보드 요약 정보 동기화 (재집계)
     session.total_books = len(all_dets)
     session.misplaced_count = sum(1 for d in all_dets if d.status == 'MISPLACED')
-    session.unknown_count = sum(1 for d in all_dets if d.status == 'UNKNOWN')
     session.ocr_failed_count = sum(1 for d in all_dets if d.status == 'OCR_FAILED')
     session.match_failed_count = sum(1 for d in all_dets if d.status == 'MATCH_FAILED')
+    # unknown_count는 인식 실패 총합 (OCR 실패 + 매칭 실패 + 구버전 UNKNOWN) — pipeline.py와 동일 의미 유지
+    session.unknown_count = (
+        session.ocr_failed_count
+        + session.match_failed_count
+        + sum(1 for d in all_dets if d.status == 'UNKNOWN')
+    )
     session.updated_at = func.now() # 업데이트 시간 트리거
 
 
