@@ -236,6 +236,9 @@ def delete_false_detection(session_id: str, detection_id: str, db: Session = Dep
     
     # 1. 탐지 결과 DB에서 완전히 삭제
     db.delete(det)
+
+    # 🚨 [추가] autoflush=False 대응: 재계산 쿼리를 날리기 전에 DB 트랜잭션에 삭제 상태를 반영합니다.
+    db.flush()
     
     # 2. 공통 함수 호출 (삭제 후 남은 도서들의 중복 해소 및 LIS 재정렬 자동 반영)
     recalculate_session_status(session_id, db)
