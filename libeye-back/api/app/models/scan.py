@@ -51,6 +51,10 @@ class ScanSession(Base):
     match_failed_count = Column(Integer, default=0)  # OCR은 됐으나 DB 매칭 실패
     inferred_location_id = Column(String(50), nullable=True)
     elapsed_sec = Column(Float, nullable=True)
+    # 🌟 [신규] 소요시간 그룹별 분리 저장 (초)
+    yolo_time = Column(Float, nullable=True)  # YOLO 탐지
+    ocr_time = Column(Float, nullable=True)   # Gemma OCR (1차 + 2차 재인식)
+    io_time = Column(Float, nullable=True)    # 크롭/업로드/다운로드/매칭/판별/DB저장 등 I/O성 작업 합산
 
     images = relationship("ScanImage", back_populates="session", cascade="all, delete-orphan")
     results = relationship("ScanResultDetail", back_populates="session", cascade="all, delete-orphan")

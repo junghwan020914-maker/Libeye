@@ -71,7 +71,7 @@ def process_scan_session(session_id: str):
 
             # 1. MinIO에서 원본 이미지 다운로드
             print(f"[{session_id}] 1. 원본 이미지 다운로드: {original_file_name}")
-            with timer.stage("이미지 다운로드"):
+            with timer.stage("이미지 다운로드", "IO"):
                 img = download_image("original-bucket", original_file_name)
             if img is None:
                 print(
@@ -81,7 +81,7 @@ def process_scan_session(session_id: str):
 
             # 2. YOLO 탐지
             print(f"[{session_id}] 2. YOLO 탐지 ({img_record.image_id})")
-            with timer.stage("YOLO 탐지"):
+            with timer.stage("YOLO 탐지", "YOLO"):
                 boxes, masks = run_detection(img)
 
             local_results = []  # 현재 이미지에서만 탐지된 결과
@@ -95,7 +95,7 @@ def process_scan_session(session_id: str):
                     x1, y1, x2, y2 = map(int, box.xyxy[0])
 
                     # 3. 마스크 크롭 + MinIO 업로드 (🚨수정됨: 이름 충돌 방지를 위해 image_id 추가)
-                    with timer.stage("크롭+업로드"):
+                    with timer.stage("크롭+업로드", "IO"):
                         crop_img = crop_spine(img, box, masks, idx)
                         crop_key = f"{session_id}_{img_record.image_id}_crop_{idx}.png"
                         crop_url = upload_image("crop-bucket", crop_key, crop_img)
@@ -104,7 +104,7 @@ def process_scan_session(session_id: str):
                     _, buf = cv2.imencode(".png", crop_img)
                     b64 = base64.b64encode(buf).decode("utf-8")
                     print(f"[{session_id}] OCR 요청 중 (crop {idx})")
-                    with timer.stage("OCR"):
+                    with timer.stage("OCR", "OCR"):
                         ocr_result = extract_text_with_gemma(b64)
 
                     # 5. DB 하이브리드 퍼지 매칭 (기존 로직 그대로 유지)
@@ -116,7 +116,7 @@ def process_scan_session(session_id: str):
                     # 🌟 [추가됨] matcher.py가 산출한 최고 매칭 점수 (매칭 실패 시에도 최고 점수 보존)
                     match_score = 0.0
                     if raw_call_number.strip() or raw_title.strip():
-                        with timer.stage("DB 매칭"):
+                        with timer.stage("DB 매칭", "IO"):
                             print(
                                 f"[{session_id}] 매칭 진행 ( OCR 청구기호: '{raw_call_number}', 제목: '{raw_title}')"
                             )
@@ -222,7 +222,7 @@ def process_scan_session(session_id: str):
         # location_id가 없으면 detect_misplacements 내부에서 다수결로 추론
         # 6. 병합된 전체 리스트를 통해 오배열 판별
         print(f"[{session_id}] 6. 오배열 판별 (총 {len(global_results)}권 병합됨)")
-        with timer.stage("오배열 판별"):
+        with timer.stage("오배열 판별", "IO"):
             final_results, resolved_loc, inferred_loc = detect_misplacements(
                 global_results, session.location_id if session else None
             )
@@ -236,49 +236,51 @@ def process_scan_session(session_id: str):
             # 재인식 전용 함수 임포트
             from service.ocr import extract_text_with_gemma_retry
             
-            with timer.stage("미매칭 도서 2차 OCR 및 재매칭"):
-                for r in unmatched_books:
-                    # 1) crop_url에서 파일명(Key) 추출 (기존 original_file_name 방식 준용)
-                    crop_file_name = r["crop_url"].split("crop-bucket/")[-1]
-                    
-                    # 2) 저장소(MinIO/S3)에서 크롭된 이미지 다시 다운로드
+            for r in unmatched_books:
+                # 1) crop_url에서 파일명(Key) 추출 (기존 original_file_name 방식 준용)
+                crop_file_name = r["crop_url"].split("crop-bucket/")[-1]
+
+                # 2) 저장소(MinIO/S3)에서 크롭된 이미지 다시 다운로드
+                with timer.stage("이미지 다운로드", "IO"):
                     crop_img = download_image("crop-bucket", crop_file_name)
-                    if crop_img is None:
-                        print(f"[{session_id}] 크롭 이미지 다운로드 실패로 스킵: {crop_file_name}")
-                        continue
-                    
-                    # 3) 다시 Base64 인코딩
-                    _, buf = cv2.imencode(".png", crop_img)
-                    b64 = base64.b64encode(buf).decode("utf-8")
-                    
-                    # 4) 보정용 프롬프트 기반 Gemma OCR 재호출
+                if crop_img is None:
+                    print(f"[{session_id}] 크롭 이미지 다운로드 실패로 스킵: {crop_file_name}")
+                    continue
+
+                # 3) 다시 Base64 인코딩
+                _, buf = cv2.imencode(".png", crop_img)
+                b64 = base64.b64encode(buf).decode("utf-8")
+
+                # 4) 보정용 프롬프트 기반 Gemma OCR 재호출
+                with timer.stage("OCR", "OCR"):
                     ocr_result = extract_text_with_gemma_retry(b64)
-                    
-                    # 🛠️ [안전 장치] 어떤 타입이 들어와도 안전하게 문자열 변환 및 strip 처리
-                    raw_call_number = str(ocr_result.get("call_number") if ocr_result.get("call_number") is not None else "").strip()
-                    raw_title = str(ocr_result.get("title") if ocr_result.get("title") is not None else "").strip()
-                    
-                    # 5) 새 텍스트 결과가 있다면 다시 DB 하이브리드 매칭 시도
-                    if raw_call_number.strip() or raw_title.strip():
-                        print(f"[{session_id}] 2차 OCR 획득 -> 청구기호: '{raw_call_number}', 제목: '{raw_title}'")
-                        # 🌟 match_book_pipeline은 (best_match, highest_score) 튜플을 반환하므로 언팩
+
+                # 🛠️ [안전 장치] 어떤 타입이 들어와도 안전하게 문자열 변환 및 strip 처리
+                raw_call_number = str(ocr_result.get("call_number") if ocr_result.get("call_number") is not None else "").strip()
+                raw_title = str(ocr_result.get("title") if ocr_result.get("title") is not None else "").strip()
+
+                # 5) 새 텍스트 결과가 있다면 다시 DB 하이브리드 매칭 시도
+                if raw_call_number.strip() or raw_title.strip():
+                    print(f"[{session_id}] 2차 OCR 획득 -> 청구기호: '{raw_call_number}', 제목: '{raw_title}'")
+                    # 🌟 match_book_pipeline은 (best_match, highest_score) 튜플을 반환하므로 언팩
+                    with timer.stage("DB 매칭", "IO"):
                         matched, match_score = match_book_pipeline(db, raw_call_number, raw_title, limit=5)
 
-                        if matched:
-                            print(f"[{session_id}] 🎉 [구제 성공] 2차 재인식 매칭 완료: {matched.title}")
-                            # 기존 구조체 정보 갱신
-                            r["matched_book_id"] = matched.book_id
-                            r["matched_call_number"] = matched.call_number
-                            r["matched_title"] = matched.title
-                            r["assigned_loc_id"] = matched.assigned_loc_id
-                            r["expected_order"] = matched.expected_order
-                            # 🌟 2차 재매칭으로 구제된 점수로 갱신
-                            r["highest_score"] = round(float(match_score), 2)
-                            r["raw_ocr_data"] = ocr_result  # 보정된 OCR 데이터로 교체
+                    if matched:
+                        print(f"[{session_id}] 🎉 [구제 성공] 2차 재인식 매칭 완료: {matched.title}")
+                        # 기존 구조체 정보 갱신
+                        r["matched_book_id"] = matched.book_id
+                        r["matched_call_number"] = matched.call_number
+                        r["matched_title"] = matched.title
+                        r["assigned_loc_id"] = matched.assigned_loc_id
+                        r["expected_order"] = matched.expected_order
+                        # 🌟 2차 재매칭으로 구제된 점수로 갱신
+                        r["highest_score"] = round(float(match_score), 2)
+                        r["raw_ocr_data"] = ocr_result  # 보정된 OCR 데이터로 교체
             
             # 6-B. 재매칭 성공 도서들이 생겼으므로, 오배열 판별(status 및 누락 등) 최종 갱신
             print(f"[{session_id}] 6-B. 재인식 결과 반영하여 최종 오배열 재판별")
-            with timer.stage("최종 오배열 재판별"):
+            with timer.stage("최종 오배열 재판별", "IO"):
                 final_results, resolved_loc, inferred_loc = detect_misplacements(
                     final_results, session.location_id if session else None
                 )
@@ -364,6 +366,15 @@ def process_scan_session(session_id: str):
             session.ocr_failed_count = ocr_failed_count
             session.match_failed_count = match_failed_count
             session.elapsed_sec = timer.elapsed()
+            # 🌟 [신규] 소요시간을 단계 그룹별로 분리 저장
+            #   - yolo_time: YOLO 탐지
+            #   - ocr_time : Gemma OCR (1차 + 미매칭 2차 재인식)
+            #   - io_time  : 크롭+업로드 / 이미지 다운로드 / DB 매칭 / 오배열 판별 /
+            #                최종 재판별 / DB 저장 등 입출력성 작업 합산
+            #     (io_time은 이 직후 실행되는 최종 commit 자체 시간은 포함하지 못함)
+            session.yolo_time = timer.category_total("YOLO")
+            session.ocr_time = timer.category_total("OCR")
+            session.io_time = timer.category_total("IO")
 
         # 9. DailyAnalytics upsert — 날짜별 집계 캐시 갱신 (주간 차트용)
         from datetime import date as date_type
@@ -391,7 +402,7 @@ def process_scan_session(session_id: str):
         total_row.match_failed_count = (total_row.match_failed_count or 0) + match_failed_count
         total_row.session_count = (total_row.session_count or 0) + 1
 
-        with timer.stage("DB 저장(commit)"):
+        with timer.stage("DB 저장(commit)", "IO"):
             db.commit()
 
         print(f"[{session_id}] 파이프라인 완료")

@@ -50,7 +50,11 @@ CREATE TABLE Scan_Session (
     ocr_failed_count INT DEFAULT 0,          -- OCR 자체 실패 수 (텍스트 추출 불가, OCR_FAILED)
     match_failed_count INT DEFAULT 0,        -- OCR은 됐으나 DB 매칭 실패 수 (MATCH_FAILED)
     inferred_location_id VARCHAR(50),        -- 책 다수결로 추론된 실제 서가 ID (선택한 서가와 다를 때만 저장)
-    elapsed_sec FLOAT                        -- 파이프라인 총 소요시간 (초)
+    elapsed_sec FLOAT,                       -- 파이프라인 총 소요시간 (초)
+    -- 🌟 소요시간 그룹별 분리 저장 (초)
+    yolo_time FLOAT,                         -- YOLO 탐지
+    ocr_time FLOAT,                          -- Gemma OCR (1차 + 2차 재인식)
+    io_time FLOAT                            -- 크롭/업로드/다운로드/매칭/판별/DB저장 등 I/O성 작업 합산
 );
 
 -- 🚨 3.2 [신규 추가] 스캔 이미지 조각 테이블 (Scan_Image)

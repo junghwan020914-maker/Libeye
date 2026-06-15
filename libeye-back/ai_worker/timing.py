@@ -58,13 +58,19 @@ class StageTimer:
         self._t0 = time.perf_counter()
         # label -> {"total": 누적초, "count": 호출횟수}
         self._stats: dict[str, dict[str, float]] = {}
+        # category(YOLO/OCR/IO) -> 누적초. DB에 그룹별로 저장하기 위함.
+        self._categories: dict[str, float] = {}
 
     def elapsed(self) -> float:
         """시작 시점부터 현재까지의 총 경과 시간(초)을 반환한다."""
         return round(time.perf_counter() - self._t0, 2)
 
+    def category_total(self, category: str) -> float:
+        """지정한 카테고리(YOLO/OCR/IO)의 누적 소요시간(초)을 반환한다."""
+        return round(self._categories.get(category, 0.0), 2)
+
     @contextmanager
-    def stage(self, label: str):
+    def stage(self, label: str, category: str | None = None):
         start = time.perf_counter()
         try:
             yield
@@ -73,6 +79,11 @@ class StageTimer:
             stat = self._stats.setdefault(label, {"total": 0.0, "count": 0})
             stat["total"] += elapsed
             stat["count"] += 1
+            # category가 주어지면 그룹별 누적치도 함께 집계 (YOLO/OCR/IO)
+            if category:
+                self._categories[category] = (
+                    self._categories.get(category, 0.0) + elapsed
+                )
             _logger.info(f"[{self.tag}] ⏱ {label}: {elapsed:.2f}s")
 
     def summary(self):
