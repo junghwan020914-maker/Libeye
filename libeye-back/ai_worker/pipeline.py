@@ -164,7 +164,7 @@ def process_scan_session(session_id: str):
             # 🚨 [핵심 알고리즘] 중복 제거(Deduplication) 및 병합 로직
             if global_results and local_results:
                 # N번째 이미지의 우측 끝과 N+1번째 이미지의 좌측 끝을 교차 비교 (기본 3권, 최대 5권 등으로 가변 설정 가능)
-                overlap_window = 3
+                overlap_window = 5
                 
                 # 🛠️ [버그 수정] global_results의 전체 크기가 window보다 작을 때를 대비한 안전 장치
                 actual_window = min(overlap_window, len(global_results))
