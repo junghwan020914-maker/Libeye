@@ -1,6 +1,6 @@
 version: "3"
 agent:
-  authtoken: 3F4YSah1NjRXebwOoYa8cIYNAyF_3M9VwWedWc1UoixxhgvDs
+  authtoken: 3FAH3TeCLvmbUYuolu73IxaQeKA_69MydSE2VRhpkKf95UGm9
 
 tunnels:
   # 프론트엔드 터널 (기존)
