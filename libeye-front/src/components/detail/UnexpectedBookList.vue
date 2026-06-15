@@ -13,13 +13,11 @@ const emit = defineEmits<{
     </h3>
     <div class="flex flex-col gap-2">
       <template v-for="d in detections" :key="d.detection_id">
-
-        <div v-if="d.status === 'MISPLACED'"
+        <div v-if="d.status === 'EXTRA'"
           class="p-3 rounded-lg border flex items-center justify-between shadow-sm transition-colors"
           :class="d.is_verified ? 'bg-white border-stone-200 hover:bg-stone-50' : 'bg-orange-50 border-orange-300'">
           <div class="flex items-center gap-3 cursor-pointer" @click="emit('select', d)">
-            <img v-if="d.crop_image_url" :src="d.crop_image_url"
-              class="w-8 h-12 object-cover rounded shadow-sm border"
+            <img v-if="d.crop_image_url" :src="d.crop_image_url" class="w-8 h-12 object-cover rounded shadow-sm border"
               :class="d.is_verified ? 'border-stone-200 bg-stone-100' : 'border-orange-400'" />
             <div>
               <div class="text-xs font-bold flex items-center gap-1"
@@ -34,17 +32,16 @@ const emit = defineEmits<{
               </div>
             </div>
           </div>
-          
+
           <div v-if="d.is_verified" class="shrink-0 ml-2">
             <span v-if="d.verification_method === 'BATCH_OVERWRITE'"
               class="text-[10px] font-bold text-stone-600 bg-stone-200 px-2 py-1 rounded">일괄-강제완료</span>
-            <span v-else
-              class="text-[10px] font-bold text-green-600 bg-green-50 px-2 py-1 rounded">조치완료</span>
+            <span v-else class="text-[10px] font-bold text-green-600 bg-green-50 px-2 py-1 rounded">조치완료</span>
           </div>
           <button v-else @click.stop="emit('edit', d)"
             class="bg-orange-600 text-white px-3 py-1.5 rounded text-[10px] font-bold shadow shrink-0 ml-2">수동교정</button>
         </div>
-
+        
         <div v-else-if="d.status === 'OCR_FAILED'"
           class="p-3 rounded-lg border flex items-center justify-between shadow-sm transition-colors"
           :class="d.is_verified ? 'bg-white border-stone-200' : 'bg-red-50 border-red-200'">

@@ -103,19 +103,16 @@ const shelfInventory = computed(() => {
 //    - MISPLACED + 이 서가 소속 아님: assigned_loc_id가 다른 서가 → 타 구역에서 잘못 꽂힌 책
 //    - UNKNOWN: 청구기호 인식 실패로 소속 자체를 알 수 없는 책
 //    ※ MISPLACED여도 이 서가 expected_books에 있으면 shelfInventory에서 처리됨
+// 본 서가 소속이 아닌 외부 도서 및 미인식 도서 필터링
 const unexpectedDetections = computed(() => {
     if (!sessionData.value?.detections) return [];
 
-    const expectedBookIds = new Set(
-        (sessionData.value.expected_books ?? []).map((b: any) => b.book_id)
-    );
-
     return sessionData.value.detections.filter((d: any) =>
         d.status === 'UNKNOWN' ||
-        d.status === 'OCR_FAILED' ||   // 💡 [추가] Gemma 응답/인식 실패 케이스 지원
-        d.status === 'MATCH_FAILED' || // 💡 [추가] OCR은 되었으나 DB 매칭 실패 케이스 지원
-        d.status === 'DUPLICATE' || 
-        (d.status === 'MISPLACED' && !expectedBookIds.has(d.matched_book_id))
+        d.status === 'OCR_FAILED' ||   // Gemma 응답/인식 실패
+        d.status === 'MATCH_FAILED' || // DB 매칭 실패
+        d.status === 'DUPLICATE' ||    // 중복 매칭
+        d.status === 'EXTRA'           // 💡 [수정] 백엔드 규격에 맞춰 타 구역 도서(EXTRA)를 직접 필터링
     );
 });
 
