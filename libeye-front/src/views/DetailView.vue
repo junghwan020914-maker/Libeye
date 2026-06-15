@@ -112,7 +112,9 @@ const unexpectedDetections = computed(() => {
 
     return sessionData.value.detections.filter((d: any) =>
         d.status === 'UNKNOWN' ||
-        d.status === 'DUPLICATE' || // 🌟 중복 매칭 오류 도서도 수동 교정 대상 리스트에 포함
+        d.status === 'OCR_FAILED' ||   // 💡 [추가] Gemma 응답/인식 실패 케이스 지원
+        d.status === 'MATCH_FAILED' || // 💡 [추가] OCR은 되었으나 DB 매칭 실패 케이스 지원
+        d.status === 'DUPLICATE' || 
         (d.status === 'MISPLACED' && !expectedBookIds.has(d.matched_book_id))
     );
 });
@@ -251,10 +253,12 @@ const ignoreDetection = async () => {
 const verifyAllActions = async () => {
     if (!sessionData.value) return;
 
-    // 1. 조치 완료되지 않은 탐지 항목 카운트 (오배열 미조치, 외부도서, 미인식)
+    // 1. 조치 완료되지 않은 탐지 항목 카운트
     const unverifiedDetections = sessionData.value.detections.filter(
         (d: any) => (d.status === 'MISPLACED' && !d.is_verified) ||
-            d.status === 'UNKNOWN'
+            d.status === 'UNKNOWN' ||
+            d.status === 'OCR_FAILED' ||  // 💡 [추가]
+            d.status === 'MATCH_FAILED'   // 💡 [추가]
     );
 
     // 2. 유실/미인식 도서 카운트 (MISSING)

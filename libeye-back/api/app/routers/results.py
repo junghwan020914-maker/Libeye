@@ -43,7 +43,13 @@ def recalculate_session_status(session_id: str, db: Session):
             else:
                 d.status = 'EXTRA'
         else:
-            d.status = 'UNKNOWN'
+            call_num = str(d.raw_ocr_call_number or "").strip()
+            title = str(d.raw_ocr_title or "").strip()
+            
+            if (not call_num and not title) or "인식실패" in call_num or "인식실패" in title:
+                d.status = 'OCR_FAILED'
+            else:
+                d.status = 'MATCH_FAILED'
             
     # 3. 올바른 위치의 도서들을 대상으로 LIS 오배열 판별 수행
     if valid_seq:
@@ -76,6 +82,8 @@ def recalculate_session_status(session_id: str, db: Session):
     session.total_books = len(all_dets)
     session.misplaced_count = sum(1 for d in all_dets if d.status == 'MISPLACED')
     session.unknown_count = sum(1 for d in all_dets if d.status == 'UNKNOWN')
+    session.ocr_failed_count = sum(1 for d in all_dets if d.status == 'OCR_FAILED')
+    session.match_failed_count = sum(1 for d in all_dets if d.status == 'MATCH_FAILED')
     session.updated_at = func.now() # 업데이트 시간 트리거
 
 
@@ -241,13 +249,14 @@ def delete_false_detection(session_id: str, detection_id: str, db: Session = Dep
 def verify_all_actions(session_id: str, db: Session = Depends(get_db)):
     unverified_dets = db.query(ScanResultDetail).filter(
         ScanResultDetail.session_id == session_id, 
-        ScanResultDetail.status.in_(['MISPLACED', 'UNKNOWN', 'EXTRA']),
+        # 💡 [수정] 'OCR_FAILED' 및 'MATCH_FAILED' 상태 도서들도 일괄 조치 처리 대상에 포함시킵니다.
+        ScanResultDetail.status.in_(['MISPLACED', 'UNKNOWN', 'EXTRA', 'OCR_FAILED', 'MATCH_FAILED']),
         ScanResultDetail.is_verified == False
     ).all()
     
     for det in unverified_dets:
         det.is_verified = True
-        det.verification_method = 'BATCH_OVERWRITE' # 🌟 강제 일괄 덮어쓰기 기록
+        det.verification_method = 'BATCH_OVERWRITE'
         
     db.commit()
     return {"message": "All pending actions overwritten successfully", "updated_count": len(unverified_dets)}

@@ -9,7 +9,18 @@ const props = defineProps<{
 // 상태별로 도서 분류 (순서대로 정렬 추가)
 const matchedBooks = computed(() => props.detections.filter(d => d.status === 'MATCH').sort((a,b) => a.detected_order - b.detected_order));
 const misplacedBooks = computed(() => props.detections.filter(d => d.status === 'MISPLACED').sort((a,b) => a.detected_order - b.detected_order));
-const unknownBooks = computed(() => props.detections.filter(d => d.status === 'UNKNOWN' || d.status === 'MISSING').sort((a,b) => a.detected_order - b.detected_order));
+// 변경 후 (💡 OCR_FAILED와 MATCH_FAILED 조건 추가)
+const unknownBooks = computed(() => 
+  props.detections
+    .filter(d => 
+      d.status === 'UNKNOWN' || 
+      d.status === 'MISSING' || 
+      d.status === 'OCR_FAILED' || 
+      d.status === 'MATCH_FAILED'
+    )
+    .sort((a, b) => a.detected_order - b.detected_order)
+);
+
 </script>
 
 <template>

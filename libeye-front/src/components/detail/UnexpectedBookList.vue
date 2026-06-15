@@ -34,22 +34,59 @@ const emit = defineEmits<{
             class="bg-orange-600 text-white px-3 py-1.5 rounded text-[10px] font-bold shadow shrink-0 ml-2">수동교정</button>
         </div>
 
-        <div v-else-if="d.status === 'UNKNOWN'"
-          class="bg-stone-100 p-3 rounded-lg border border-stone-300 flex items-center justify-between">
-          <div class="flex items-center gap-3">
+        <div v-else-if="d.status === 'OCR_FAILED'"
+          class="bg-red-50 p-3 rounded-lg border border-red-200 flex items-center justify-between shadow-sm">
+          <div class="flex items-center gap-3" @click="emit('select', d)">
+            <img v-if="d.crop_image_url" :src="d.crop_image_url"
+              class="w-8 h-12 object-cover rounded shadow-sm border border-red-300" />
+            <div>
+              <div class="text-xs font-bold text-red-900 flex items-center gap-1">
+                <span class="bg-red-500 text-white text-[8px] px-1 rounded">OCR 실패</span> 
+                {{ d.ocr_call_number || d.ocr_title || '텍스트 판독 불가' }}
+              </div>
+              <div class="text-[10px] text-red-600 mt-1">
+                Gemma 모델이 문자를 인식하지 못했습니다. (재촬영 권장)
+              </div>
+            </div>
+          </div>
+          <button @click.stop="emit('edit', d)"
+            class="bg-stone-800 text-white px-3 py-1.5 rounded text-[10px] font-bold shadow shrink-0 ml-2">수동교정</button>
+        </div>
+
+        <div v-else-if="d.status === 'MATCH_FAILED'"
+          class="bg-stone-100 p-3 rounded-lg border border-stone-300 flex items-center justify-between shadow-sm">
+          <div class="flex items-center gap-3" @click="emit('select', d)">
             <img v-if="d.crop_image_url" :src="d.crop_image_url"
               class="w-8 h-12 object-cover rounded shadow-sm border border-stone-300" />
             <div>
               <div class="text-xs font-bold text-stone-700 flex items-center gap-1">
-                <span class="bg-stone-500 text-white text-[8px] px-1 rounded">미인식</span> {{
-                  d.ocr_call_number || '해독 불가' }}
+                <span class="bg-orange-500 text-white text-[8px] px-1 rounded">매칭 실패</span> 
+                {{ d.ocr_call_number || d.ocr_title || '해독 불가' }}
               </div>
-              <div class="text-[10px] text-stone-500 mt-0.5">최고 매칭 점수 {{ Math.round(d.highest_score)
-              }}점</div>
+              <div class="text-[10px] text-stone-500 mt-1">
+                최고 매칭 점수 <strong>{{ Math.round(d.highest_score) }}점</strong> (도서 정보 부족)
+              </div>
             </div>
           </div>
-          <button @click="emit('edit', d)"
-            class="bg-stone-800 text-white px-3 py-1.5 rounded text-[10px] font-bold shadow shrink-0">수동교정</button>
+          <button @click.stop="emit('edit', d)"
+            class="bg-stone-800 text-white px-3 py-1.5 rounded text-[10px] font-bold shadow shrink-0 ml-2">수동교정</button>
+        </div>
+
+        <div v-else-if="d.status === 'UNKNOWN'"
+          class="bg-stone-100 p-3 rounded-lg border border-stone-300 flex items-center justify-between">
+          <div class="flex items-center gap-3" @click="emit('select', d)">
+            <img v-if="d.crop_image_url" :src="d.crop_image_url"
+              class="w-8 h-12 object-cover rounded shadow-sm border border-stone-300" />
+            <div>
+              <div class="text-xs font-bold text-stone-700 flex items-center gap-1">
+                <span class="bg-stone-500 text-white text-[8px] px-1 rounded">미인식</span> 
+                {{ d.ocr_call_number || '해독 불가' }}
+              </div>
+              <div class="text-[10px] text-stone-500 mt-0.5">최고 매칭 점수 {{ Math.round(d.highest_score) }}점</div>
+            </div>
+          </div>
+          <button @click.stop="emit('edit', d)"
+            class="bg-stone-800 text-white px-3 py-1.5 rounded text-[10px] font-bold shadow shrink-0 ml-2">수동교정</button>
         </div>
 
         <div v-else-if="d.status === 'DUPLICATE'"
