@@ -289,6 +289,18 @@ def process_scan_session(session_id: str):
         for r in final_results:
             if r.get("matched_book_id") in duplicate_book_ids:
                 r["status"] = "DUPLICATE"    
+            elif r.get("matched_book_id") is None:
+                # 💡 [추가] 미매칭 원인 분석 및 상태 세분화
+                ocr = r.get("raw_ocr_data", {})
+                call_num = str(ocr.get("call_number") or "").strip()
+                title = str(ocr.get("title") or "").strip()
+                
+                # 케이스 1: Gemma가 제대로 응답을 내놓지 않았거나 인식실패인 경우
+                if (not call_num and not title) or "인식실패" in call_num or "인식실패" in title:
+                    r["status"] = "OCR_FAILED"
+                # 케이스 2: OCR 텍스트는 존재하나 정보가 부족하여 DB 매칭에 실패한 경우
+                else:
+                    r["status"] = "MATCH_FAILED"
 
         # location_id가 없었던 경우 추론된 값을 세션에 저장
         if session and not session.location_id and resolved_loc:
@@ -337,7 +349,10 @@ def process_scan_session(session_id: str):
         # MISSING은 탐지된 책이 아니라 DB에서 추론된 누락이므로 total_books에서 제외
         total_books = len(final_results)
         misplaced_count = sum(1 for r in final_results if r["status"] == "MISPLACED")
-        unknown_count = sum(1 for r in final_results if r["status"] == "UNKNOWN")
+        # 💡 [수정] 세분화된 상태 개수를 집계하되, 기존 DB 스키마 호환을 위해 unknown_count에 합산
+        ocr_failed_count = sum(1 for r in final_results if r["status"] == "OCR_FAILED")
+        match_failed_count = sum(1 for r in final_results if r["status"] == "MATCH_FAILED")
+        unknown_count = ocr_failed_count + match_failed_count
 
         if session:
             session.status = "COMPLETED"
