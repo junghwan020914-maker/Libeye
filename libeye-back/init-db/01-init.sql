@@ -102,7 +102,9 @@ CREATE TABLE Daily_Analytics (
     date DATE PRIMARY KEY,
     total_scans INT DEFAULT 0,               -- 해당 날 총 인식 책 권수
     misplaced_count INT DEFAULT 0,           -- 오배열 수 (MISPLACED)
-    unknown_count INT DEFAULT 0,             -- 인식 실패 수 (UNKNOWN)
+    unknown_count INT DEFAULT 0,             -- 인식 실패 총합 (ocr_failed_count + match_failed_count)
+    ocr_failed_count INT DEFAULT 0,          -- OCR 자체 실패 수 (OCR_FAILED)
+    match_failed_count INT DEFAULT 0,        -- DB 매칭 실패 수 (MATCH_FAILED)
     session_count INT DEFAULT 0,             -- 완료된 세션 수
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -112,7 +114,9 @@ CREATE TABLE Analytics_Total (
     id INT PRIMARY KEY DEFAULT 1,
     total_scans INT DEFAULT 0,               -- 전체 누적 인식 책 권수
     misplaced_count INT DEFAULT 0,           -- 전체 누적 오배열 수 (MISPLACED)
-    unknown_count INT DEFAULT 0,             -- 전체 누적 인식 실패 수 (UNKNOWN)
+    unknown_count INT DEFAULT 0,             -- 전체 누적 인식 실패 총합 (ocr_failed_count + match_failed_count)
+    ocr_failed_count INT DEFAULT 0,          -- 전체 누적 OCR 자체 실패 수 (OCR_FAILED)
+    match_failed_count INT DEFAULT 0,        -- 전체 누적 DB 매칭 실패 수 (MATCH_FAILED)
     session_count INT DEFAULT 0,             -- 전체 누적 세션 수
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT analytics_total_single_row CHECK (id = 1) -- 단일 행 강제

@@ -375,6 +375,8 @@ def process_scan_session(session_id: str):
         daily.total_scans = (daily.total_scans or 0) + total_books
         daily.misplaced_count = (daily.misplaced_count or 0) + misplaced_count
         daily.unknown_count = (daily.unknown_count or 0) + unknown_count
+        daily.ocr_failed_count = (daily.ocr_failed_count or 0) + ocr_failed_count
+        daily.match_failed_count = (daily.match_failed_count or 0) + match_failed_count
         daily.session_count = (daily.session_count or 0) + 1
 
         # 10. AnalyticsTotal upsert — 전체 누적 집계 갱신 (오류비율/AI성공률용)
@@ -385,6 +387,8 @@ def process_scan_session(session_id: str):
         total_row.total_scans = (total_row.total_scans or 0) + total_books
         total_row.misplaced_count = (total_row.misplaced_count or 0) + misplaced_count
         total_row.unknown_count = (total_row.unknown_count or 0) + unknown_count
+        total_row.ocr_failed_count = (total_row.ocr_failed_count or 0) + ocr_failed_count
+        total_row.match_failed_count = (total_row.match_failed_count or 0) + match_failed_count
         total_row.session_count = (total_row.session_count or 0) + 1
 
         with timer.stage("DB 저장(commit)"):
