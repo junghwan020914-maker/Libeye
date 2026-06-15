@@ -13,7 +13,7 @@ MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "admin")
 MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "admin1234")
 
 OLLAMA_API_URL = os.getenv("OLLAMA_URL", "http://ollama:11434/api/generate")
-OLLAMA_MODEL_NAME = os.getenv("OLLAMA_MODEL_NAME", "gemma4:31b")
+OLLAMA_MODEL_NAME = os.getenv("OLLAMA_MODEL_NAME", "gemma4:31b-it-qat")
 
 YOLO_CONFIDENCE = float(os.getenv("YOLO_CONFIDENCE", "0.6"))
 OCR_MATCH_THRESHOLD = float(os.getenv("OCR_MATCH_THRESHOLD", "85.0"))
