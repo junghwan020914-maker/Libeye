@@ -354,8 +354,10 @@ def process_scan_session(session_id: str):
         # 💡 [수정] 인식 실패 원인을 OCR 실패 / DB 매칭 실패로 세분화하여 각각 집계
         ocr_failed_count = sum(1 for r in final_results if r["status"] == "OCR_FAILED")
         match_failed_count = sum(1 for r in final_results if r["status"] == "MATCH_FAILED")
-        # unknown_count는 두 실패의 합 (하위 호환/분석 대시보드용으로 유지)
-        unknown_count = ocr_failed_count + match_failed_count
+        # 💡 [추가] 중복매칭(DUPLICATE)은 정상 매칭이 아니므로 통계상 인식 실패로 간주
+        duplicate_count = sum(1 for r in final_results if r["status"] == "DUPLICATE")
+        # unknown_count는 세 실패의 합 (OCR 실패 + DB 매칭 실패 + 중복매칭, 분석 대시보드용)
+        unknown_count = ocr_failed_count + match_failed_count + duplicate_count
 
         if session:
             session.status = "COMPLETED"
