@@ -183,19 +183,26 @@ def process_scan_session(session_id: str):
 
                         is_match = False
 
+                        # 각 데이터 추출 및 공백 제거
+                        g_call_num = str(g_book["raw_ocr_data"].get("call_number") or "").strip()
+                        l_call_num = str(l_book["raw_ocr_data"].get("call_number") or "").strip()
+                        
+                        g_title = str(g_book["raw_ocr_data"].get("title") or "").strip()
+                        l_title = str(l_book["raw_ocr_data"].get("title") or "").strip()
+
                         # 기준 1: 매칭된 정답 도서 ID가 동일한 경우
                         if g_book["matched_book_id"] and l_book["matched_book_id"]:
                             if g_book["matched_book_id"] == l_book["matched_book_id"]:
                                 is_match = True
                                 
-                        # 기준 2: 정답은 못 찾았지만 OCR 추출 청구기호 텍스트가 완전히 일치하는 경우
-                        elif g_book["raw_ocr_data"].get("call_number") and l_book["raw_ocr_data"].get("call_number"):
-                            if g_book["raw_ocr_data"]["call_number"].strip() == l_book["raw_ocr_data"]["call_number"].strip():
+                        # 🌟 [보완] 기준 2: 둘 다 정상적인 청구기호 텍스트를 가졌고, 완벽히 일치하는 경우
+                        elif g_call_num and l_call_num and "인식실패" not in g_call_num and "인식실패" not in l_call_num:
+                            if g_call_num == l_call_num:
                                 is_match = True
                                 
-                        # ✨ [개선 보완] 기준 3: 청구기호는 없거나 다르지만, OCR 추출 도서명이 완벽히 일치하는 경우
-                        elif g_book["raw_ocr_data"].get("title") and l_book["raw_ocr_data"].get("title"):
-                            if str(g_book["raw_ocr_data"]["title"]).strip() == str(l_book["raw_ocr_data"]["title"]).strip():
+                        # 🌟 [보완] 기준 3: 청구기호는 없거나 다르지만, 둘 다 정상적인 도서명을 가졌고 완벽히 일치하는 경우
+                        elif g_title and l_title and "인식실패" not in g_title and "인식실패" not in l_title:
+                            if g_title == l_title:
                                 is_match = True
 
                         if is_match:
