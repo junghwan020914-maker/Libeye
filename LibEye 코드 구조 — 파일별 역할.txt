@@ -1,0 +1,199 @@
+ LibEye 코드 구조 — 파일별 역할
+
+
+LIBEYE-LIBRARAY-EYE/
+|--------------- libeye-back/
+|                        |-------- api/		# FastAPI 서버 (접수/조회 전담, AI 의존성 없음)
+|                        |-------- ai_worker/	# Celery 워커 (YOLO/OCR/매칭 — 실제 AI 처리)
+|                        |-------- init-db/		# Postgres 최초 기동 시 실행되는 SQL
+|                        |-------- docs/		# 프로젝트 관련 문서 정리 폴더
+|                        |-------- docker-compose.yml	# 전체 서비스(컨테이너) 오케스트레이션 정의
+|                        |-------- ngrok.yml
+|--------------- libeye-front/ 		# Vue 3 + TypeScript + Tailwind (모바일 우선 UI)
+
+
+---
+
+1. 백엔드 (libeye-back) 
+
+1-1 인프라 / 설정 파일
+
+docker-compose.yml    전체 서비스(컨테이너) 오케스트레이션 정의.
+                            	postgres, minio, redis, ollama, api, ai-worker,
+                            	ngrok, adminer 8개 서비스를 한 번에 구동.
+
+ ngrok.yml                  ngrok 터널 설정 (외부/모바일 기기에서 접속하기 위한 설정)
+ init-db/01-init.sql        DB 최초 생성 시 테이블 스키마 및 확장 초기화
+ init-db/02-seed-data.sql   서가 위치(Library_Master) 등 초기 데이터 삽입
+ docs/LibEye_API_Collection.json   API 명세 모음 (Postman 등에서 테스트를 위한 API 컬렉션)
+
+
+ 2-2. API 서버 (libeye-back/api): 프론트엔드의 요청을 받아 처리하는 웹 서버 (사용자와 직접 통신)
+ Dockerfile                 API 서버 컨테이너 이미지 빌드 설정
+ requirements.txt           API 서버 Python 패키지 의존성 목록
+ seed-data.sql              초기 데이터 SQL
+ 
+ [ app/ - 애플리케이션 핵심 ]
+ app/main.py                FastAPI 앱 진입점. CORS 설정, DB 초기화,각 라우터(기능별 API) 등록, 서버 시작 시 시드 실행.
+ app/database.py            PostgreSQL 연결(SQLAlchemy 엔진/세션) 설정
+ app/dependencies.py        API 요청마다 DB 세션을 열고 닫아주는 의존성 주입 함수
+
+[ app/core/ - 공용 기능 ]
+ app/core/celery_client.py  API 서버가 AI 워커에게 작업을 보내기 위한 Celery 클라이언트
+ app/core/seed.py           서버 시작 시 초기 데이터(서가/도서)를 DB에 자동 삽입
+ app/core/storage.py        MinIO(이미지 저장소) 연결 및 업로드/다운로드 클라이언트
+
+ [ app/models/ - DB 테이블 정의 (SQLAlchemy ORM) ]
+ app/models/scan.py         서가 스캔 관련 테이블
+                            (Library_Master 서가위치, Book_Master 도서정보,
+                             ScanSession 스캔세션, ScanImage 스캔이미지,
+                             ScanResultDetail 책별 인식/매칭 결과)
+ app/models/analytics.py    통계 집계 테이블 (DailyAnalytics 일별 통계, AnalyticsTotal 누적 통계)
+
+[ app/routers/ - 기능별 API 엔드포인트 ]
+ app/routers/sessions.py    스캔 세션 시작 (이미지 업로드 → AI 분석 작업 등록)
+ app/routers/results.py     스캔 결과 상세 조회 및 수동 보정 (책 강제 매칭, 검수 확인, 삭제, 전체 확인 요청 처리)
+ app/routers/history.py     과거 스캔 이력 조회
+ app/routers/map.py         서가 지도(층/구역별 상태) 조회
+ app/routers/locations.py   서가 위치 목록 조회
+ app/routers/analytics.py   대시보드 통계 데이터 조회 (오배열/인식실패 추이 등)
+ app/routers/search.py      도서 검색 (수동 매칭 시 책을 찾기 위한 검색)
+ app/routers/image_proxy.py MinIO에 저장된 이미지를 프론트에 중계(프록시)해주는 API
+
+ 2-3. AI 워커 (libeye-back/ai_worker) : 무거운 AI 연산(이미지 분석)을 백그라운드에서 비동기로 처리
+ Dockerfile                 AI 워커 컨테이너 이미지 빌드 설정
+ requirements.txt           AI 워커 Python 패키지 의존성 목록 (torch, ultralytics 등)
+ weights/yolo26l            YOLO 책등 탐지 AI 모델 가중치 파일
+
+ config.py                  환경설정 모음 (DB/Redis/MinIO 주소, AI 모델 이름, YOLO 신뢰도 임계값, OCR 매칭 임계값 등)
+ database.py                AI 워커용 DB 연결 설정
+ storage.py                 AI 워커용 MinIO 이미지 업로드/다운로드 처리
+ timing.py                  작업 단계별(다운로드/YOLO/OCR/매칭/저장) 소요시간 측정 유틸
+ models.py                  서가 스캔용 DB 테이블 정의 (API의 scan.py와 동일 구조)
+
+ pipeline.py                이미지 분석 파이프라인
+                            이미지 다운로드 → YOLO로 책등 탐지 → 책등 잘라내기 →
+                            Gemma OCR로 청구기호/제목 인식 → DB 매칭 →
+                            오배열 판정 → 결과 DB 저장 까지의 전체 흐름을 담당.
+
+ [ service/ - AI 단위 기능 모듈 ]
+ service/detector.py        YOLO 모델로 이미지에서 책등 영역을 탐지하고 잘라냄(crop)
+ service/ocr.py             Gemma(Ollama) 모델로 잘라낸 책등에서 청구기호/제목 글자 인식 프로세스
+ service/matcher.py         인식된 글자를 DB 도서와 유사도 매칭 (PostgreSQL pg_trgm + 퍼지 매칭으로 가장 비슷한 책 찾기)
+ service/misplacement.py    오배열 판정 로직(서가 기준 1차 필터 + 정렬순서(LIS) 기준 2차 필터)
+
+
+ 3. 프론트엔드 (libeye-front) — Vue 3 + TypeScript
+
+ 3-1. 설정 / 빌드 파일
+ package.json / package-lock.json   프로젝트 의존성 및 스크립트 정의
+ vite.config.ts             Vite 빌드 도구 설정
+ tsconfig*.json             TypeScript 컴파일러 설정
+ tailwind.config.js         Tailwind CSS(스타일) 설정
+ postcss.config.js          CSS 후처리 설정
+ index.html                 앱이 로드되는 최상위 HTML 진입점
+ Dockerfile / docker-compose.yaml   프론트엔드 컨테이너 빌드/구동 설정
+ public/favicon.svg, icons.svg      파비콘 및 아이콘 리소스
+
+ 3-2. 앱 핵심 (src/)
+ src/main.ts                Vue 앱 생성 및 마운트(시작) 진입점
+ src/App.vue                앱 최상위 루트 컴포넌트
+ src/style.css              전역 스타일
+ src/router/index.ts        화면(페이지) 라우팅 정의 (URL ↔ 화면 연결)
+
+ [ src/api/ - 백엔드 API 호출 ]
+ src/api/axios.ts           공통 HTTP 통신 설정(axios 인스턴스)
+ src/api/sessionAPI.ts      스캔 세션/결과/이력/지도/통계/검색 등 메인 API 호출
+ src/api/detectionAPI.ts    인식 결과 보정(강제매칭/검수/삭제) API 호출
+ src/api/cartAPI.ts         북카트 업로드/결과 조회 API 호출
+
+ [ src/views/ - 화면(페이지) 단위 ]
+ src/views/LoginView.vue        로그인 화면
+ src/views/DashboardView.vue    메인 대시보드 (홈 화면)
+ src/views/CameraView.vue       서가 촬영 카메라 화면
+ src/views/DetailView.vue       스캔 결과 상세 화면 (인식/오배열 결과 확인 및 보정)
+ src/views/HistoryView.vue      스캔 이력 화면
+ src/views/MapView.vue          서가 지도(층별 상태) 화면
+ src/views/AnalyticsView.vue    통계 대시보드 화면
+ src/views/GuideView.vue        촬영 가이드(사용법 안내) 화면
+ src/views/CartScanView.vue     북카트 촬영 화면
+ src/views/CartResultView.vue   북카트 정렬 결과 화면
+
+ [ src/components/ - UI 컴포넌트 (기능별 분리) ]
+ components/camera/         카메라 촬영 관련 UI
+    CameraTopBar / CameraBottomBar   카메라 상/하단 바
+    CameraGridGuide                  촬영 격자 가이드
+    CropBoxOverlay                   촬영 영역(크롭 박스) 오버레이
+    CaptureConfirmSheet              촬영 후 확인 시트
+    LocationSelectModal              서가 위치 선택 모달
+    UploadingOverlay                 업로드 중 로딩 오버레이
+    CameraErrorPanel                 카메라 오류 안내 패널
+
+ components/dashboard/      대시보드 화면 구성 UI
+    BookSearchPanel / BookSearchResultCard   도서 검색 패널·결과 카드
+    CartServiceCard                  북카트 서비스 진입 카드
+    QuickActionButtons               빠른 실행 버튼
+    ResultStatusList                 결과 상태 목록
+
+ components/detail/         결과 상세 화면 UI
+    BookDetailModal                  책 상세 정보 모달
+    ManualMatchModal                 수동 매칭 모달
+    ShelfImageCarousel               서가 이미지 슬라이드
+    ShelfInventoryList               서가 도서 목록
+    UnexpectedBookList               오배열/예상 외 도서 목록
+    LocationWarningBanner            위치 경고 배너
+    ImageZoomModal                   이미지 확대 모달
+    AnalysisLoadingOverlay           분석 중 로딩 오버레이
+    DetailActionBar                  상세 화면 하단 액션 바
+
+ components/map/            서가 지도 UI
+    FloorTabs / LevelSelectModal     층 탭·단(높이) 선택 모달
+    ShelfGridBoard                   서가 격자 보드
+    ShelfStatusModal                 서가 상태 모달
+    MapLegend                        지도 범례
+
+ components/history/        이력 화면 UI
+    HistoryFilterTabs                이력 필터 탭
+    SessionHistoryCard               세션 이력 카드
+
+ components/guide/          가이드 화면 UI
+    GuideChecklist                   촬영 체크리스트
+    GuideShotExamples                올바른 촬영 예시
+
+ components/uploader/
+    DirectUploader                   파일 직접 업로드 컴포넌트
+ components/HelloWorld.vue  (Vue 기본 템플릿 잔여 컴포넌트)
+
+ [ src/composables/ - 재사용 로직 (Vue Composition 함수) ]
+ useCameraStream.ts         카메라 영상 스트림 제어
+ useCropBox.ts              촬영 크롭 박스 조작 로직
+ usePolygonOverlay.ts       인식 영역(다각형) 오버레이 그리기
+ useAnalysisPolling.ts      AI 분석 완료 여부를 주기적으로 조회(폴링)
+ useCartPolling.ts          북카트 분석 결과 폴링
+
+ [ src/utils/ - 공용 유틸리티 함수 ]
+ datetime.ts                날짜/시간 포맷 변환
+ file.ts                    파일(이미지) 처리 유틸
+ fullscreen.ts              전체화면 제어
+ sessionStatus.ts           세션 상태 표시/판별
+ shelfGrid.ts               서가 격자 좌표 계산
+
+ [ src/types/ - 타입 정의 (TypeScript) ]
+ history.ts                 이력 데이터 타입
+ session.d.ts               세션 데이터 타입
+
+ [ src/constants/ ]
+ shelf.ts                   서가 관련 상수값 정의
+
+ [ src/assets/ ]
+ logo.png, hero.png, image_example.png 등   로고/이미지 리소스
+
+
+
+ [ 요약 ]
+   - libeye-back/api       : 사용자 요청을 받는 웹 API 서버 (FastAPI)
+   - libeye-back/ai_worker : 이미지를 분석하는 AI 처리 워커 (YOLO + OCR + 매칭)
+   - libeye-front          : 사용자가 보는 화면 (Vue 모바일 웹앱)
+   - PostgreSQL / Redis / MinIO / Ollama : 데이터·작업큐·이미지·AI모델 인프라
+   - 전부 Docker(docker-compose)로 묶여 우분투 서버에서 구동됨
+
